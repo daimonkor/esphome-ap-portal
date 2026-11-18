@@ -5,6 +5,9 @@ Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monito
 ## Unreleased
 
 ### Added
+- Password reset on the spot (`password_reset:`): the RESET button 4 times in a row (each start
+  under 10 s) or BOOT held 5 s while running brings back the password from `wifi: ap:`. Only
+  power-on / RESET starts count. Hooks `on_power_cycle` (count) and `on_password_reset` (source).
 - Stage 4: the landing page. Redirect / page / gate, a small template engine (`{{var}}`,
   `{{{raw}}}`, `{{#if}}` / `{{#unless}}` / `{{else}}`) for the built-in page and your own `html`,
   own variables from strings or lambdas (`vars:`), hooks `on_landing` and `on_enter`. While

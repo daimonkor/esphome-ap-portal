@@ -510,4 +510,58 @@ class ClientTable {
   size_t next_{0};
 };
 
+// ───────────────────────────── password reset on the spot ─────────────────────────────
+// Two ways back to the firmware password when the device is out of reach on the network:
+//  * power cycles — N boots in a row that each ended within POWER_CYCLE_WINDOW_MS of uptime
+//    (the RESET button or the power plug). Only power-on / external resets count: deep-sleep
+//    wake-ups, software restarts (OTA, Restart), crashes and brown-outs never do.
+//  * a pin — a button held for `hold` while the device runs.
+constexpr uint32_t POWER_CYCLE_WINDOW_MS = 10000;
+
+struct PowerCycleStep {
+  uint8_t count;  // to store
+  bool reset;     // reset the password now
+};
+
+// One boot. `stored` is the count kept in flash, `counted` whether this boot's reset reason
+// counts, `needed` the number of cycles (0 = off).
+inline PowerCycleStep power_cycle_step(uint8_t stored, bool counted, uint8_t needed) {
+  if (needed == 0 || !counted)
+    return {0, false};
+  const uint8_t c = (uint8_t) (stored >= needed ? 1 : stored + 1);
+  if (c >= needed)
+    return {0, true};
+  return {c, false};
+}
+
+// A button held down long enough; fires once per press.
+class HoldDetector {
+ public:
+  explicit HoldDetector(uint32_t hold_ms = 5000) : hold_(hold_ms) {}
+  void set_hold(uint32_t ms) { this->hold_ = ms; }
+  // Returns true once, when the button has been down for `hold`.
+  bool update(bool pressed, uint32_t now) {
+    if (!pressed) {
+      this->down_ = false;
+      this->fired_ = false;
+      return false;
+    }
+    if (!this->down_) {
+      this->down_ = true;
+      this->since_ = now;
+    }
+    if (!this->fired_ && elapsed(now, this->since_, this->hold_)) {
+      this->fired_ = true;
+      return true;
+    }
+    return false;
+  }
+
+ protected:
+  uint32_t hold_;
+  bool down_{false};
+  bool fired_{false};
+  uint32_t since_{0};
+};
+
 }  // namespace ap_portal_core

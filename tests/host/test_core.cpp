@@ -303,6 +303,33 @@ static void test_claim_clients() {
   CHECK(t.find(19, m) && m.b[4] == 19);  // full table keeps the newest
 }
 
+// ------------------------------------------------------------------ password reset
+static void test_password_reset() {
+  // four power cycles
+  PowerCycleStep st = power_cycle_step(0, true, 4);
+  CHECK(st.count == 1 && !st.reset);
+  st = power_cycle_step(st.count, true, 4);
+  st = power_cycle_step(st.count, true, 4);
+  CHECK(st.count == 3 && !st.reset);
+  st = power_cycle_step(st.count, true, 4);
+  CHECK(st.count == 0 && st.reset);
+  CHECK(!power_cycle_step(3, false, 4).reset);         // deep-sleep wake / OTA restart: not counted
+  CHECK(power_cycle_step(3, false, 4).count == 0);     // ... and the series starts over
+  CHECK(!power_cycle_step(9, true, 0).reset);          // off
+  CHECK(power_cycle_step(200, true, 4).count == 1);    // junk in flash: a fresh series
+
+  HoldDetector h(5000);
+  CHECK(!h.update(true, 0));
+  CHECK(!h.update(true, 4999));
+  CHECK(h.update(true, 5000));
+  CHECK(!h.update(true, 9000));   // fires once per press
+  CHECK(!h.update(false, 9100));
+  CHECK(!h.update(true, 10000));
+  CHECK(!h.update(false, 12000));  // released too early
+  CHECK(!h.update(true, 20000));
+  CHECK(h.update(true, 25000));
+}
+
 int main() {
   test_timers();
   test_hosts();
@@ -314,6 +341,7 @@ int main() {
   test_strings();
   test_templates();
   test_claim_clients();
+  test_password_reset();
   std::printf("%d checks, %d failed\n", g_checks, g_fail);
   return g_fail ? EXIT_FAILURE : EXIT_SUCCESS;
 }

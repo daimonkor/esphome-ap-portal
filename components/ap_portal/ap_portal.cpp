@@ -5,7 +5,9 @@
 #include <cstring>
 
 #include <esp_http_server.h>
+#include <driver/gpio.h>
 #include <esp_netif.h>
+#include <esp_system.h>
 #include <esp_wifi.h>
 #include <lwip/sockets.h>
 #include "dhcpserver/dhcpserver.h"
@@ -101,6 +103,8 @@ struct PasswordRecord {
 
 void ApPortal::setup() {
   this->boot_ms_ = millis();
+  if (this->reset_pin_ != nullptr)
+    this->reset_pin_->setup();
   auto *w = wifi::global_wifi_component;
   if (w == nullptr) {
     this->mark_failed();
@@ -128,6 +132,7 @@ void ApPortal::setup() {
     this->firmware_password_ = std::string(ap.get_password().c_str(), ap.get_password().size());
     if (this->password_persist_) {
       this->password_pref_ = global_preferences->make_preference<PasswordRecord>(fnv1_hash("ap_portal_password"));
+      this->power_cycle_boot_();  // may erase the saved password before it is read
       PasswordRecord rec{};
       if (this->password_pref_.load(&rec) && rec.magic == PASSWORD_MAGIC && rec.len <= 63) {
         const std::string pw(rec.pw, rec.len);
@@ -179,6 +184,7 @@ void ApPortal::loop() {
       this->scan_suppressing_ = false;
     }
   }
+  this->reset_tick_(now);
   if (this->scan_retry_at_ != 0 && ap_portal_core::reached(now, this->scan_retry_at_)) {
     this->scan_retry_at_ = 0;
     this->scan_start_();
@@ -605,6 +611,92 @@ void ApPortal::lock_release_() {
     return;
   const esp_err_t e = esp_wifi_set_country(&this->country_orig_);
   ESP_LOGD(TAG, "Radio channel lock released: %s", esp_err_to_name(e));
+}
+
+// ───────────────────────────── password reset on the spot ─────────────────────────────
+
+static const char *reset_reason_name(esp_reset_reason_t r) {
+  switch (r) {
+    case ESP_RST_POWERON: return "power on";
+    case ESP_RST_EXT: return "external";
+    case ESP_RST_SW: return "software";
+    case ESP_RST_PANIC: return "panic";
+    case ESP_RST_INT_WDT:
+    case ESP_RST_TASK_WDT:
+    case ESP_RST_WDT: return "watchdog";
+    case ESP_RST_DEEPSLEEP: return "deep sleep";
+    case ESP_RST_BROWNOUT: return "brownout";
+    case ESP_RST_USB: return "USB";
+    default: return "other";
+  }
+}
+
+// In setup(), before the saved password is read. The count lives in flash (RTC memory does not
+// survive a power cut) and is synced at once: the next power cut may come within a second.
+void ApPortal::power_cycle_boot_() {
+  if (this->power_cycles_ == 0)
+    return;
+  const esp_reset_reason_t why = esp_reset_reason();
+  const bool counted = why == ESP_RST_POWERON || why == ESP_RST_EXT;
+  this->cycles_pref_ = global_preferences->make_preference<uint8_t>(fnv1_hash("ap_portal_power_cycles"));
+  uint8_t stored = 0;
+  this->cycles_pref_.load(&stored);
+  const auto st = ap_portal_core::power_cycle_step(stored, counted, this->power_cycles_);
+  if (st.count != stored || st.reset) {
+    this->cycles_pref_.save(&st.count);
+  }
+  if (st.reset) {
+    PasswordRecord rec{};  // magic 0: nothing saved
+    this->password_pref_.save(&rec);
+    this->reset_by_cycles_ = true;
+    ESP_LOGW(TAG, "%u quick starts in a row: access point password back to firmware", this->power_cycles_);
+  } else if (st.count > 0) {
+    this->power_cycle_count_ = st.count;
+    this->cycle_clear_pending_ = true;
+    ESP_LOGI(TAG, "Quick start %u/%u (%s); %u more within %u s each resets the access point password", st.count,
+             this->power_cycles_, reset_reason_name(why), this->power_cycles_ - st.count,
+             (unsigned) (ap_portal_core::POWER_CYCLE_WINDOW_MS / 1000));
+  }
+  if (st.count != stored || st.reset)
+    global_preferences->sync();
+}
+
+void ApPortal::reset_tick_(uint32_t now) {
+  if (!this->boot_hooks_done_) {  // triggers from loop(), not setup()
+    this->boot_hooks_done_ = true;
+    if (this->power_cycle_count_ > 0)
+      this->on_power_cycle_.call(this->power_cycle_count_);
+    if (this->reset_by_cycles_)
+      this->on_password_reset_.call("power_cycles");
+    if (this->boot_pin_ >= 0) {
+      gpio_config_t io{};
+      io.pin_bit_mask = 1ULL << this->boot_pin_;
+      io.mode = GPIO_MODE_INPUT;
+      io.pull_up_en = GPIO_PULLUP_ENABLE;
+      gpio_config(&io);
+    }
+  }
+  // Running longer than the window: this start was a normal one, the series is over.
+  if (this->cycle_clear_pending_ && now >= ap_portal_core::POWER_CYCLE_WINDOW_MS) {
+    this->cycle_clear_pending_ = false;
+    uint8_t zero = 0;
+    this->cycles_pref_.save(&zero);
+    global_preferences->sync();
+  }
+  bool pressed = false;
+  if (this->reset_pin_ != nullptr) {
+    pressed = this->reset_pin_->digital_read();
+  } else if (this->boot_pin_ >= 0) {
+    pressed = gpio_get_level((gpio_num_t) this->boot_pin_) == 0;  // BOOT pulls to ground
+  } else {
+    return;
+  }
+  if (this->reset_hold_.update(pressed, now)) {
+    ESP_LOGW(TAG, "Reset button held: access point password back to firmware");
+    this->password_pending_ = false;
+    this->apply_password_(this->firmware_password_, true);
+    this->on_password_reset_.call("button");
+  }
 }
 
 // ───────────────────────────── HTTP ─────────────────────────────

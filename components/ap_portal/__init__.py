@@ -10,7 +10,7 @@ import ipaddress
 import logging
 import re
 
-from esphome import automation
+from esphome import automation, pins
 import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome.const import (
@@ -18,6 +18,7 @@ from esphome.const import (
     CONF_MANUAL_IP,
     CONF_PASSWORD,
     CONF_PATH,
+    CONF_PIN,
     CONF_SSID,
     CONF_STATIC_IP,
     CONF_TRIGGER_ID,
@@ -59,6 +60,17 @@ CONF_PASS_PATHS = "pass_paths"
 CONF_VARS = "vars"
 CONF_ON_LANDING = "on_landing"
 CONF_ON_ENTER = "on_enter"
+CONF_PASSWORD_RESET = "password_reset"
+CONF_POWER_CYCLES = "power_cycles"
+CONF_HOLD = "hold"
+CONF_ON_POWER_CYCLE = "on_power_cycle"
+CONF_ON_PASSWORD_RESET = "on_password_reset"
+
+# The board's BOOT button: the strapping pin every ESP32 board wires to a button.
+BOOT_PINS = {
+    "ESP32": 0, "ESP32S2": 0, "ESP32S3": 0,
+    "ESP32C2": 9, "ESP32C3": 9, "ESP32C6": 9, "ESP32C61": 9, "ESP32H2": 9,
+}
 CONF_ON_CLIENT_CONNECTED = "on_client_connected"
 CONF_ON_CLIENT_DISCONNECTED = "on_client_disconnected"
 CONF_ON_AP_RESTORED = "on_ap_restored"
@@ -90,6 +102,10 @@ LandingTrigger = ap_portal_ns.class_(
 EnterTrigger = ap_portal_ns.class_(
     "EnterTrigger", automation.Trigger.template(cg.std_string, cg.std_string)
 )
+PowerCycleTrigger = ap_portal_ns.class_("PowerCycleTrigger", automation.Trigger.template(cg.int_))
+PasswordResetTrigger = ap_portal_ns.class_(
+    "PasswordResetTrigger", automation.Trigger.template(cg.std_string)
+)
 ScanAction = ap_portal_ns.class_("ScanAction", automation.Action)
 SetPasswordAction = ap_portal_ns.class_("SetPasswordAction", automation.Action)
 ResetPasswordAction = ap_portal_ns.class_("ResetPasswordAction", automation.Action)
@@ -114,6 +130,33 @@ def _hex_color(value):
     if len(h) != 6 or any(c not in "0123456789abcdefABCDEF" for c in h):
         raise cv.Invalid(f"'{value}' is not a color like #3d7bff")
     return "#" + h.lower()
+
+
+def _reset_pin(value):
+    if value is False or str(value).lower() in ("false", "off", "none"):
+        return False
+    return pins.gpio_input_pin_schema(value)
+
+
+def _power_cycles(value):
+    value = cv.int_range(min=0, max=9)(value)
+    if value == 1:
+        raise cv.Invalid("power_cycles: 0 (off) or 2..9 — one power-on is every normal start")
+    return value
+
+
+PASSWORD_RESET_SCHEMA = cv.Schema(
+    {
+        # RESET button or power plug, this many times in a row, each start under 10 s; 0 = off
+        cv.Optional(CONF_POWER_CYCLES, default=4): _power_cycles,
+        # a button held while running; default: the board's BOOT button; false = off
+        cv.Optional(CONF_PIN): _reset_pin,
+        cv.Optional(CONF_HOLD, default="5s"): cv.All(
+            cv.positive_time_period_milliseconds,
+            cv.Range(min=cv.TimePeriod(seconds=2), max=cv.TimePeriod(seconds=30)),
+        ),
+    }
+)
 
 
 def _var_name(value):
@@ -192,6 +235,13 @@ CONFIG_SCHEMA = cv.All(
                 {cv.Optional(CONF_ENABLED, default=True): cv.boolean}
             ),
             cv.Optional(CONF_LANDING, default={}): cv.All(LANDING_SCHEMA, _validate_landing),
+            cv.Optional(CONF_PASSWORD_RESET, default={}): PASSWORD_RESET_SCHEMA,
+            cv.Optional(CONF_ON_POWER_CYCLE): automation.validate_automation(
+                {cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(PowerCycleTrigger)}
+            ),
+            cv.Optional(CONF_ON_PASSWORD_RESET): automation.validate_automation(
+                {cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(PasswordResetTrigger)}
+            ),
             cv.Optional(CONF_ON_CLIENT_CONNECTED): automation.validate_automation(
                 {cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(ClientConnectedTrigger)}
             ),
@@ -258,6 +308,15 @@ def _final_validate(config):
             raise cv.Invalid(
                 f"SSID '{ssid}' with the MAC suffix ('-XXXXXX') is longer than 32 bytes; "
                 f"keep it to {32 - SUFFIX_LEN}."
+            )
+
+    cycles = config[CONF_PASSWORD_RESET][CONF_POWER_CYCLES]
+    if config[CONF_PASSWORD_PERSIST] and cycles and "safe_mode" in full:
+        attempts = int(full["safe_mode"].get("num_attempts", 10))
+        if cycles >= attempts:
+            raise cv.Invalid(
+                f"password_reset: power_cycles ({cycles}) must be below safe_mode num_attempts "
+                f"({attempts}), or safe mode starts first"
             )
 
     if not ESPHOME_VERSION.startswith(TESTED_ESPHOME + "."):
@@ -363,6 +422,53 @@ async def to_code(config):
 
     if config[CONF_PASSWORD_PERSIST]:
         cg.add_define("USE_AP_PORTAL_PASSWORD_PERSIST")
+        reset = config[CONF_PASSWORD_RESET]
+        cg.add(var.set_power_cycles(reset[CONF_POWER_CYCLES]))
+        cg.add(var.set_reset_hold(reset[CONF_HOLD].total_milliseconds))
+        pin = reset.get(CONF_PIN)
+        if pin:
+            cg.add(var.set_reset_pin(await cg.gpio_pin_expression(pin)))
+        elif pin is None:
+            boot = _boot_pin_if_free(config)
+            if boot is not None:
+                cg.add(var.set_boot_pin(boot))
+    for conf in config.get(CONF_ON_POWER_CYCLE, []):
+        trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var)
+        await automation.build_automation(trigger, [(cg.int_, "count")], conf)
+    for conf in config.get(CONF_ON_PASSWORD_RESET, []):
+        trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var)
+        await automation.build_automation(trigger, [(cg.std_string, "source")], conf)
+
+
+def _pin_numbers(node, skip):
+    """Every pin number in the configuration (pin blocks: a dict with 'number' and 'mode'/'inverted')."""
+    if node is skip:
+        return
+    if isinstance(node, dict):
+        if "number" in node and ("mode" in node or "inverted" in node):
+            yield node["number"]
+        for v in node.values():
+            yield from _pin_numbers(v, skip)
+    elif isinstance(node, (list, tuple)):
+        for v in node:
+            yield from _pin_numbers(v, skip)
+
+
+def _boot_pin_if_free(config):
+    from esphome.components import esp32
+
+    boot = BOOT_PINS.get(esp32.get_esp32_variant())
+    if boot is None:
+        return None
+    if boot in set(_pin_numbers(CORE.config, config)):
+        _LOGGER.warning(
+            "ap_portal: GPIO%d (the BOOT button) is used elsewhere in this configuration, so "
+            "holding BOOT does not reset the access point password. Set password_reset: pin: "
+            "to another button, or pin: false to silence this.",
+            boot,
+        )
+        return None
+    return boot
 
 
 # ───────────────────────────── sockets ─────────────────────────────

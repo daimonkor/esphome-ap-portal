@@ -17,6 +17,7 @@
 #include "esphome/components/web_server_base/web_server_base.h"
 #include "esphome/core/automation.h"
 #include "esphome/core/component.h"
+#include "esphome/core/gpio.h"
 #include "esphome/core/preferences.h"
 #include "ap_portal_core.h"
 
@@ -47,6 +48,10 @@ class ApPortal : public Component, public AsyncWebHandler {
   void set_enter_path(const std::string &p) { this->route_.enter_path = p; }
   void set_enter_window(uint32_t ms) { this->passes_.set_window(ms); }
   void add_pass_path(const std::string &p) { this->route_.pass_paths.push_back(p); }
+  void set_power_cycles(uint8_t n) { this->power_cycles_ = n; }
+  void set_reset_hold(uint32_t ms) { this->reset_hold_.set_hold(ms); }
+  void set_reset_pin(GPIOPin *pin) { this->reset_pin_ = pin; }
+  void set_boot_pin(int8_t gpio) { this->boot_pin_ = gpio; }
 
   // ── component ──
   void setup() override;
@@ -92,6 +97,8 @@ class ApPortal : public Component, public AsyncWebHandler {
   void add_on_portal_stop(std::function<void()> &&cb) { this->on_portal_stop_.add(std::move(cb)); }
   void add_on_landing(std::function<void(std::string, std::string)> &&cb) { this->on_landing_.add(std::move(cb)); }
   void add_on_enter(std::function<void(std::string, std::string)> &&cb) { this->on_enter_.add(std::move(cb)); }
+  void add_on_power_cycle(std::function<void(int)> &&cb) { this->on_power_cycle_.add(std::move(cb)); }
+  void add_on_password_reset(std::function<void(std::string)> &&cb) { this->on_password_reset_.add(std::move(cb)); }
 
  protected:
   bool want_active_() const { return this->active_lambda_ ? this->active_lambda_() : this->active_; }
@@ -139,6 +146,8 @@ class ApPortal : public Component, public AsyncWebHandler {
   // scan, password
   void scan_start_();
   void apply_password_(const std::string &password, bool save);
+  void power_cycle_boot_();
+  void reset_tick_(uint32_t now);
 
   QueueHandle_t events_{nullptr};
   bool events_registered_{false};
@@ -198,6 +207,17 @@ class ApPortal : public Component, public AsyncWebHandler {
   uint32_t password_apply_at_{0};
   ESPPreferenceObject password_pref_;
 
+  // password reset on the spot
+  uint8_t power_cycles_{0};
+  ESPPreferenceObject cycles_pref_;
+  int power_cycle_count_{0};     // this boot's place in a series, for on_power_cycle
+  bool cycle_clear_pending_{false};
+  bool reset_by_cycles_{false};  // fire on_password_reset from the first loop()
+  bool boot_hooks_done_{false};
+  GPIOPin *reset_pin_{nullptr};
+  int8_t boot_pin_{-1};
+  ap_portal_core::HoldDetector reset_hold_;
+
   CallbackManager<void(std::string)> on_client_connected_;
   CallbackManager<void(std::string)> on_client_disconnected_;
   CallbackManager<void()> on_ap_restored_;
@@ -205,6 +225,8 @@ class ApPortal : public Component, public AsyncWebHandler {
   CallbackManager<void()> on_portal_stop_;
   CallbackManager<void(std::string, std::string)> on_landing_;
   CallbackManager<void(std::string, std::string)> on_enter_;
+  CallbackManager<void(int)> on_power_cycle_;
+  CallbackManager<void(std::string)> on_password_reset_;
 };
 
 // ── triggers ──
@@ -249,6 +271,19 @@ class EnterTrigger : public Trigger<std::string, std::string> {
  public:
   explicit EnterTrigger(ApPortal *parent) {
     parent->add_on_enter([this](std::string mac, std::string ip) { this->trigger(mac, ip); });
+  }
+};
+
+class PowerCycleTrigger : public Trigger<int> {
+ public:
+  explicit PowerCycleTrigger(ApPortal *parent) {
+    parent->add_on_power_cycle([this](int count) { this->trigger(count); });
+  }
+};
+class PasswordResetTrigger : public Trigger<std::string> {
+ public:
+  explicit PasswordResetTrigger(ApPortal *parent) {
+    parent->add_on_password_reset([this](std::string source) { this->trigger(source); });
   }
 };
 

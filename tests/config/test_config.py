@@ -95,6 +95,20 @@ GOOD = {
           on_enter:
             - logger.log: {format: "%s %s", args: [mac.c_str(), ip.c_str()]}
         """),
+    "reset_defaults": "ap_portal:\n  password_persist: true\n",
+    "reset_own_pin": textwrap.dedent("""\
+        ap_portal:
+          password_persist: true
+          password_reset:
+            power_cycles: 3
+            pin: {number: GPIO2, inverted: true, mode: {input: true, pullup: true}}
+            hold: 3s
+          on_power_cycle:
+            - logger.log: {format: "start %d", args: [count]}
+          on_password_reset:
+            - logger.log: {format: "reset by %s", args: [source.c_str()]}
+        """),
+    "reset_off": "ap_portal:\n  password_persist: true\n  password_reset: {power_cycles: 0, pin: false}\n",
     "suffix_fits": "ap_portal:\n  ssid_suffix_mac: true\n",
     "actions": textwrap.dedent("""\
         ap_portal:
@@ -157,6 +171,12 @@ BAD = {
         head(),
         "ap_portal:\n  landing: {mode: gate, enter_window: 10s}\n",
         "enter_window",
+    ),
+    "one_power_cycle": (head(), "ap_portal:\n  password_reset: {power_cycles: 1}\n", "0 (off) or 2..9"),
+    "cycles_vs_safe_mode": (
+        head(),
+        "safe_mode:\n  num_attempts: 4\nap_portal:\n  password_persist: true\n",
+        "below safe_mode num_attempts",
     ),
     "removed_option": (head(), "ap_portal:\n  keep_ap: native\n", "keep_ap"),
 }

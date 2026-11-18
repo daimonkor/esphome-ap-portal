@@ -83,6 +83,12 @@ ap_portal:
   on_ap_restored:               # ESPHome switched the access point off, ap_portal brought it back
   on_portal_start:
   on_portal_stop:
+  password_reset:               # with password_persist: back to the password from wifi: ap:
+    power_cycles: 4             # RESET button (or power) 4 times in a row, each start under 10 s; 0 = off
+    # pin: GPIO2                # a button held while running; default: the board's BOOT button
+    hold: 5s                    # (GPIO0 on ESP32/S2/S3, GPIO9 on C3/C6/H2); pin: false = off
+  on_power_cycle:               # count — a quick start in a series (blink an LED)
+  on_password_reset:            # source: "power_cycles" or "button"
   on_landing:                   # ip, path — the landing page was shown
   on_enter:                     # mac, ip — gate: a client pressed the button
 ```
@@ -94,6 +100,19 @@ gets its answer first; kept across reboots with `password_persist: true`),
 
 From lambdas: `id(portal).is_active()`, `client_count()`, `ap_ip()`, `ssid()`, `is_scanning()`,
 `has_custom_password()`.
+
+### Forgot the access point password
+
+With `password_persist: true` a password set from the page survives reboots and reflashing, so
+there is a way back that needs no network:
+
+- press **RESET** on the board 4 times, waiting 2-3 s after each press (each start must stay
+  under 10 s) — the 4th start comes up with the password from `wifi: ap:`;
+- or hold **BOOT** for 5 s while the device runs.
+
+Only power-on and RESET-button starts count: deep-sleep wake-ups, OTA and software restarts,
+crashes and brown-outs never do. If the BOOT pin is used by something else in your
+configuration, holding BOOT is switched off (the build says so); set `pin:` to your own button.
 
 ### Landing page templates
 
@@ -130,6 +149,8 @@ through `ap_portal`: the device's pages work as usual, ESPHome's Wi-Fi form is n
 | No `wifi: ap:` | error |
 | No `manual_ip` in `wifi: ap:`, or a private address | warning: Android will not show the sign-in window |
 | SSID + MAC suffix longer than 32 bytes | error |
+| `password_reset: power_cycles` not below `safe_mode: num_attempts` | error |
+| `password_reset` BOOT pin used elsewhere | warning, holding BOOT is off |
 | A `vars:` name that is not `[a-z_][a-z0-9_]*` or is a built-in variable | error |
 | `enter_path`, `enter_window`, `pass_paths` without `mode: gate` | error |
 | ESPHome other than 2026.10.x | warning |
