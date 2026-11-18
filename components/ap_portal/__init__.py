@@ -398,6 +398,24 @@ def _final_validate(config):
                 f"keep it to {32 - SUFFIX_LEN}."
             )
 
+    wifi_ap_mode = str(full.get("wifi", {}).get("ap", {}).get("ap_mode", "FALLBACK")).upper()
+    if wifi_ap_mode != "FALLBACK":
+        # ESPHome 2026.11+ keeps the access point next to the router itself
+        if config[CONF_KEEP_AP_ON_CONNECT]:
+            raise cv.Invalid(
+                f"keep_ap_on_connect is not needed with wifi: ap: ap_mode: {wifi_ap_mode} — ESPHome keeps the "
+                "access point on router connections itself; remove one of them"
+            )
+        if config[CONF_AP_MODE] == "fallback":
+            raise cv.Invalid(
+                f"ap_portal ap_mode: fallback switches the access point off, wifi: ap: ap_mode: {wifi_ap_mode} keeps "
+                "it on; use one of them"
+            )
+        if CONF_REBOOT_TIMEOUT in config:
+            raise cv.Invalid(
+                f"with wifi: ap: ap_mode: {wifi_ap_mode} ESPHome's own wifi: reboot_timeout applies (it waits while "
+                "someone is on the access point); remove ap_portal reboot_timeout"
+            )
     wp = config[CONF_WIFI_PAGE]
     if wp[CONF_ENABLED] and not config[CONF_API][CONF_ENABLED]:
         raise cv.Invalid("wifi_page needs api: enabled (the page talks to /ap_portal/)")

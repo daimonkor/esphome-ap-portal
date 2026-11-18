@@ -125,9 +125,15 @@ void ApPortal::setup() {
     this->mark_failed();
     return;
   }
+#ifndef USE_WIFI_AP_PERSISTENT
   // ESPHome's own fallback access point would reconfigure ours and drop clients; we keep the
   // access point ourselves, so it never starts.
   w->set_ap_timeout(0);
+#else
+  // wifi: ap: ap_mode: always_on (ESPHome 2026.11+): ESPHome keeps the access point up next to the
+  // router itself and ap_timeout is how long it waits to retry a failed start — leave it alone.
+  ESP_LOGI(TAG, "Access point kept by ESPHome (wifi: ap: ap_mode)");
+#endif
 
   // Before Wi-Fi starts (setup priority WIFI + 10): everyone who reads get_ap() — displays,
   // QR codes, the device page — sees the real SSID.

@@ -246,3 +246,29 @@ def test_ap_mode_rejects_unknown(tmp_path):
     r, out = run(tmp_path, head() + "ap_portal:\n  ap_mode: sometimes\n")
     assert r.returncode != 0
     assert "ap_mode" in out or "sometimes" in out, out[-2000:]
+
+
+ALWAYS_ON = AP_GOOD + "    ap_mode: always_on\n"
+
+
+def _always_on_head():
+    return head(ap_extra=ALWAYS_ON) + "  post_connect_roaming: false\n"
+
+
+def test_wifi_ap_always_on_is_valid(tmp_path):
+    r, out = run(tmp_path, _always_on_head() + "ap_portal:\n")
+    assert r.returncode == 0, out[-2000:]
+
+
+@pytest.mark.parametrize(
+    "opts,needle",
+    [
+        ("  keep_ap_on_connect: true\n", "keep_ap_on_connect is not needed"),
+        ("  ap_mode: fallback\n", "use one of them"),
+        ("  reboot_timeout: 5min\n", "remove ap_portal reboot_timeout"),
+    ],
+)
+def test_wifi_ap_always_on_conflicts(tmp_path, opts, needle):
+    r, out = run(tmp_path, _always_on_head() + "ap_portal:\n" + opts)
+    assert r.returncode != 0
+    assert needle in out, out[-2000:]
