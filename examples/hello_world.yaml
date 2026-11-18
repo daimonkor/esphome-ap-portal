@@ -1,0 +1,36 @@
+# Hello world: the smallest working ap_portal config.
+# The device keeps its own access point next to the router connection. A phone that joins it
+# gets the "Sign in to network" window with a link to the device page.
+esphome:
+  name: ap-portal-hello
+
+esp32:
+  board: esp32-c3-devkitm-1
+  framework:
+    type: esp-idf
+
+logger:
+
+wifi:
+  ssid: my-router
+  password: router-password
+  ap:
+    ssid: AP-Portal-Hello
+    password: hello1234
+    manual_ip:                  # 100.64.4.1: Android shows the sign-in window (a private address does not)
+      static_ip: 100.64.4.1
+      gateway: 100.64.4.1
+      subnet: 255.255.255.0
+
+web_server:
+  port: 80
+  version: 3
+  local: true                   # the page works without internet
+
+external_components:
+  - source:
+      type: local
+      path: ../components       # in your project: github://daimonkor/esphome-ap-portal@v0.1.0
+    components: [ap_portal]
+
+ap_portal:

@@ -1,0 +1,78 @@
+# Battery motion sensor: the access point only in service mode (a switch), SSID with the MAC
+# suffix, a password the user can change from the device page.
+esphome:
+  name: move-sensor-ble
+  friendly_name: Move Sensor BLE
+
+esp32:
+  board: seeed_xiao_esp32c3
+  variant: esp32c3
+  framework:
+    type: esp-idf
+
+logger:
+
+wifi:
+  ssid: my-router
+  password: router-password
+  enable_on_boot: false         # Wi-Fi only in service mode
+  ap:
+    ssid: MoveSensorBLE
+    password: sensor1234
+    manual_ip:
+      static_ip: 100.64.4.1
+      gateway: 100.64.4.1
+      subnet: 255.255.255.0
+
+web_server:
+  port: 80
+  version: 3
+  local: true
+
+external_components:
+  - source:
+      type: local
+      path: ../components
+    components: [ap_portal]
+
+globals:
+  - id: service_mode
+    type: bool
+    initial_value: "false"
+
+ap_portal:
+  id: portal
+  active: !lambda return id(service_mode);
+  ssid_suffix_mac: true         # MoveSensorBLE-4FD30C
+  password_persist: true
+  landing:
+    title: Move Sensor BLE
+    accent_color: "#3d7bff"
+    icon_svg:
+      file: icons/motion.svg
+    secondary: {label: Router Wi-Fi, href: "/#wifi"}
+
+text:
+  - platform: template
+    id: new_ap_password
+    name: AP password
+    mode: password
+    optimistic: true
+    min_length: 8
+    max_length: 63
+
+button:
+  - platform: template
+    name: Scan Wi-Fi networks
+    on_press:
+      - ap_portal.scan: portal
+  - platform: template
+    name: Apply AP password
+    on_press:
+      - ap_portal.set_password:
+          id: portal
+          password: !lambda return id(new_ap_password).state;
+  - platform: template
+    name: Factory reset AP password
+    on_press:
+      - ap_portal.reset_password: portal

@@ -1,0 +1,44 @@
+# Deye battery monitor: always on, must work during power outages (router down).
+# Gate mode: a phone on the access point first sees the landing page; the button opens
+# the panel for that phone. The home network gets the panel directly.
+esphome:
+  name: deye-battery
+  friendly_name: Deye Battery
+
+esp32:
+  board: esp32-c3-devkitm-1
+  framework:
+    type: esp-idf
+
+logger:
+
+wifi:
+  ssid: my-router
+  password: router-password
+  ap:
+    ssid: Deye-Battery
+    password: deyebattery1
+    manual_ip:
+      static_ip: 100.64.4.1
+      gateway: 100.64.4.1
+      subnet: 255.255.255.0
+
+web_server:
+  port: 80
+  version: 3
+  local: true
+
+external_components:
+  - source:
+      type: local
+      path: ../components
+    components: [ap_portal]
+
+ap_portal:
+  id: portal
+  landing:
+    mode: gate
+    html:
+      file: pages/deye_landing.html
+    enter_path: /dashboard
+    pass_paths: [/history.bin]

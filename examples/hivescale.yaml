@@ -1,0 +1,57 @@
+# Solar beehive scale at the apiary: often no router at all. The access point is always on;
+# a phone stays on it thanks to quiet mode. The watchdog leaves the adapter alone while a
+# client is connected.
+esphome:
+  name: hivescale
+  friendly_name: HiveScale
+
+esp32:
+  board: esp32-c3-devkitm-1
+  framework:
+    type: esp-idf
+
+logger:
+
+wifi:
+  ssid: my-router
+  password: router-password
+  power_save_mode: LIGHT
+  ap:
+    ssid: HiveScale
+    password: hivescale1
+    manual_ip:
+      static_ip: 100.64.4.1
+      gateway: 100.64.4.1
+      subnet: 255.255.255.0
+
+web_server:
+  port: 80
+  version: 3
+  local: true
+
+external_components:
+  - source:
+      type: local
+      path: ../components
+    components: [ap_portal]
+
+ap_portal:
+  id: portal
+  log_exclude_prefixes: [/sd/]
+  landing:
+    title: HiveScale
+    accent_color: "#f59e0b"
+    secondary: {label: Router Wi-Fi, href: "/#wifi"}
+  on_client_connected:
+    - logger.log:
+        format: "phone %s joined the scale"
+        args: [mac.c_str()]
+
+interval:
+  - interval: 60s
+    then:
+      - if:
+          condition:
+            lambda: return !wifi::global_wifi_component->is_connected() && id(portal).client_count() == 0;
+          then:
+            - logger.log: "no router and nobody on the access point"

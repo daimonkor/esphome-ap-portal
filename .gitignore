@@ -1,0 +1,6 @@
+tests/host/test_core
+tests/host/test_core_asan
+.esphome/
+__pycache__/
+*.pyc
+.pytest_cache/
