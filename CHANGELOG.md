@@ -4,7 +4,13 @@ Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monito
 
 ## Unreleased
 
+### Changed
+- Tested with ESPHome 2026.11.x (was 2026.10.x); CI on 2026.11.0. `keep_ap_on_connect` and its
+  `reboot_timeout` checked on hardware (XIAO ESP32-S3) on both 2026.10.2 and 2026.11.0.
+
 ### Fixed
+- ESPHome 2026.11 returns the access point's `manual_ip` by value; the access point address was
+  read through a dangling reference. Now copied.
 - After boot, quiet mode starts at the first failed router attempt instead of waiting out the 30 s
   grace: ESPHome restarted the adapter three times meanwhile and the access point blinked.
 - Connecting to another router network from the Wi-Fi page did nothing while the device was
@@ -17,7 +23,7 @@ Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monito
 ### Added
 - **Experimental** `keep_ap_on_connect:` — ESPHome no longer switches the access point off when the
   router connects (clears ESPHome's private `has_ap_` after Wi-Fi start; build warns outside
-  ESPHome 2026.10.x). Own `reboot_timeout:` (default `wifi: reboot_timeout`) that waits while
+  ESPHome 2026.11.x). Own `reboot_timeout:` (default `wifi: reboot_timeout`) that waits while
   someone is on the access point. `ap_mode: always | fallback` with `fallback: {after, off_when_idle}`
   (fallback not yet checked on hardware).
 - Passwords in `router_fallback: firmware:` and `ap_portal.set_password` marked `cv.sensitive`

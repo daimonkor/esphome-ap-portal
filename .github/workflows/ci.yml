@@ -4,7 +4,7 @@ on:
   pull_request:
 env:
   # ap_portal leans on ESPHome Wi-Fi internals; it is tested against exactly this version.
-  ESPHOME_VERSION: "2026.10.2"
+  ESPHOME_VERSION: "2026.11.0"
 jobs:
   host-tests:
     runs-on: ubuntu-latest

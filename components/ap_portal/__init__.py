@@ -35,7 +35,7 @@ AUTO_LOAD = ["web_server_base", "captive_portal", "network", "socket"]
 
 # The library leans on ESPHome internals (fallback AP, captive_portal quiet mode, handler order),
 # so it is tested against one ESPHome version. Others may work; the build says so.
-TESTED_ESPHOME = "2026.10"
+TESTED_ESPHOME = "2026.11"
 
 CONF_ACTIVE = "active"
 CONF_SSID_SUFFIX_MAC = "ssid_suffix_mac"

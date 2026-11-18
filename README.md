@@ -22,7 +22,7 @@ What it does that ESPHome's `captive_portal` does not:
 - the SSID can carry the MAC suffix, the password can be changed from the device and survives reboots.
 
 Works on any ESP32 with the ESP-IDF framework (tested on ESP32-C3 and ESP32-S3).
-Tested with **ESPHome 2026.10.x**; the build warns on other versions.
+Tested with **ESPHome 2026.11.x**; the build warns on other versions.
 
 ## Quick start
 
@@ -172,7 +172,7 @@ and drops the built-in page.
 > **Experimental.** ESPHome switches its access point off every time the router connects (phones on
 > it drop off and Android jumps to another network). `keep_ap_on_connect: true` stops that by
 > clearing ESPHome's private `WiFiComponent::has_ap_` flag after Wi-Fi started. Checked on ESPHome
-> 2026.10.x only — on other versions the build warns; if ESPHome renames the field, the build
+> 2026.11.x only — on other versions the build warns; if ESPHome renames the field, the build
 > fails (nothing breaks on the device).
 
 ```yaml
@@ -246,7 +246,7 @@ through `ap_portal`: the device's pages work as usual, ESPHome's Wi-Fi form is n
 | `password_reset` BOOT pin used elsewhere | warning, holding BOOT is off |
 | A `vars:` name that is not `[a-z_][a-z0-9_]*` or is a built-in variable | error |
 | `enter_path`, `enter_window`, `pass_paths` without `mode: gate` | error |
-| ESPHome other than 2026.10.x | warning |
+| ESPHome other than 2026.11.x | warning |
 
 ## Examples
 
@@ -259,6 +259,6 @@ through `ap_portal`: the device's pages work as usual, ESPHome's Wi-Fi form is n
 
 ```sh
 make -C tests/host                          # core logic on your computer
-pip install "esphome==2026.10.2" pytest
+pip install "esphome==2026.11.0" pytest
 python3 -m pytest tests/config              # examples + every build check
 ```
