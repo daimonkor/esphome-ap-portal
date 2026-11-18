@@ -50,6 +50,10 @@ class ApPortal : public Component, public AsyncWebHandler {
   void add_pass_path(const std::string &p) { this->route_.pass_paths.push_back(p); }
   void set_wifi_path(const std::string &p) { this->route_.wifi_path = p; }
   void set_wifi_ap_password(bool v) { this->wifi_ap_password_ = v; }
+  void set_api(bool enabled, bool from_home) {
+    this->route_.api = enabled;
+    this->api_from_home_ = enabled && from_home;
+  }
   void set_power_cycles(uint8_t n) { this->power_cycles_ = n; }
   void set_reset_hold(uint32_t ms) { this->reset_hold_.set_hold(ms); }
   void set_reset_pin(GPIOPin *pin) { this->reset_pin_ = pin; }
@@ -136,6 +140,7 @@ class ApPortal : public Component, public AsyncWebHandler {
     ap_portal_core::Route route{ap_portal_core::Route::PASS};
     ap_portal_core::Claim claim{ap_portal_core::Claim::NONE};
     uint32_t client_ip{0};
+    bool from_ap{false};
     std::string path;
   };
   Classified classify_(AsyncWebServerRequest *request);
@@ -212,6 +217,15 @@ class ApPortal : public Component, public AsyncWebHandler {
   std::string password_pending_value_;
   uint32_t password_apply_at_{0};
   ESPPreferenceObject password_pref_;
+
+  // The API for the home network goes through web_server's login: a second handler, added with auth.
+  struct HomeApi : public AsyncWebHandler {
+    ApPortal *parent{nullptr};
+    bool canHandle(AsyncWebServerRequest *request) const override;
+    void handleRequest(AsyncWebServerRequest *request) override;
+  };
+  HomeApi home_api_;
+  bool api_from_home_{false};
 
   // the Wi-Fi page: requests from the web server task, carried out in loop() (under mu_)
   bool wifi_ap_password_{true};

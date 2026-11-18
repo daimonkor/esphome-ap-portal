@@ -109,6 +109,8 @@ GOOD = {
             - logger.log: {format: "reset by %s", args: [source.c_str()]}
         """),
     "reset_off": "ap_portal:\n  password_persist: true\n  password_reset: {power_cycles: 0, pin: false}\n",
+    "api_from_home": "ap_portal:\n  api: {from_home: true}\n  wifi_page: {enabled: false}\n",
+    "wifi_page_custom": "ap_portal:\n  wifi_page: {path: /setup, ap_password: false}\n",
     "suffix_fits": "ap_portal:\n  ssid_suffix_mac: true\n",
     "actions": textwrap.dedent("""\
         ap_portal:
@@ -178,6 +180,8 @@ BAD = {
         "safe_mode:\n  num_attempts: 4\nap_portal:\n  password_persist: true\n",
         "below safe_mode num_attempts",
     ),
+    "wifi_page_without_api": (head(), "ap_portal:\n  api: {enabled: false}\n", "needs api"),
+    "wifi_page_clash": (head(), "ap_portal:\n  wifi_page: {path: /welcome}\n", "clashes"),
     "removed_option": (head(), "ap_portal:\n  keep_ap: native\n", "keep_ap"),
 }
 

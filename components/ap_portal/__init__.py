@@ -61,6 +61,8 @@ CONF_VARS = "vars"
 CONF_ON_LANDING = "on_landing"
 CONF_ON_ENTER = "on_enter"
 CONF_WIFI_PAGE = "wifi_page"
+CONF_API = "api"
+CONF_FROM_HOME = "from_home"
 CONF_AP_PASSWORD = "ap_password"
 CONF_PASSWORD_RESET = "password_reset"
 CONF_POWER_CYCLES = "power_cycles"
@@ -249,6 +251,14 @@ CONFIG_SCHEMA = cv.All(
             ),
             cv.Optional(CONF_LANDING, default={}): cv.All(LANDING_SCHEMA, _validate_landing),
             cv.Optional(CONF_WIFI_PAGE, default={}): WIFI_PAGE_SCHEMA,
+            # /ap_portal/ endpoints and client.js for the device's own site
+            cv.Optional(CONF_API, default={}): cv.Schema(
+                {
+                    cv.Optional(CONF_ENABLED, default=True): cv.boolean,
+                    # also from the home network (behind web_server's login, if it has one)
+                    cv.Optional(CONF_FROM_HOME, default=False): cv.boolean,
+                }
+            ),
             cv.Optional(CONF_PASSWORD_RESET, default={}): PASSWORD_RESET_SCHEMA,
             cv.Optional(CONF_ON_POWER_CYCLE): automation.validate_automation(
                 {cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(PowerCycleTrigger)}
@@ -325,6 +335,8 @@ def _final_validate(config):
             )
 
     wp = config[CONF_WIFI_PAGE]
+    if wp[CONF_ENABLED] and not config[CONF_API][CONF_ENABLED]:
+        raise cv.Invalid("wifi_page needs api: enabled (the page talks to /ap_portal/)")
     if wp[CONF_ENABLED]:
         land = config[CONF_LANDING]
         if wp[CONF_PATH] in (land[CONF_PATH], land.get(CONF_ENTER_PATH)):
@@ -409,6 +421,8 @@ async def to_code(config):
         cg.add(var.add_static_var("icon_svg", _read(landing[CONF_ICON_SVG])))
     cg.add(var.add_static_var("primary_label", landing.get(CONF_PRIMARY_LABEL, "Open device page")))
     cg.add(var.add_static_var("primary_default", "" if CONF_PRIMARY_LABEL in landing else "1"))
+    api = config[CONF_API]
+    cg.add(var.set_api(api[CONF_ENABLED], api[CONF_FROM_HOME]))
     wifi_page = config[CONF_WIFI_PAGE]
     if wifi_page[CONF_ENABLED]:
         cg.add(var.set_wifi_path(wifi_page[CONF_PATH]))

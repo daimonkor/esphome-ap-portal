@@ -58,6 +58,9 @@ input{width:100%;box-sizing:border-box;font:inherit;padding:12px;border-radius:1
 button{width:100%;font:inherit;font-weight:700;padding:13px;border-radius:12px;border:0;background:{{accent_color}};color:{{accent_text}};cursor:pointer}
 button.s{background:transparent;color:inherit;border:1px solid rgba(127,127,127,.35);font-weight:600;margin-top:8px}
 a{color:{{accent_color}};text-decoration:none;font-weight:600}
+.tt{display:none;position:fixed;left:12px;right:12px;bottom:12px;max-width:420px;margin:0 auto;background:#1b2230;color:#f2f4f8;border-radius:16px;padding:14px 16px;font-size:14px;box-shadow:0 8px 30px rgba(0,0,0,.35)}
+.tt div{margin-top:4px}.tt .m{opacity:.75}.tt a{color:#9fc0ff}.tt a.tb{display:block;text-align:center;margin-top:10px;background:{{accent_color}};color:{{accent_text}};padding:11px;border-radius:12px}
+main{padding-bottom:140px}
 </style></head><body><main>
 <a href="/" id="bk">← {{title}}</a><h1 id="h">Wi-Fi</h1>
 <div class="c"><h2 id="hs">Router network</h2><div id="st" class="m">…</div></div>
@@ -73,32 +76,66 @@ a{color:{{accent_color}};text-decoration:none;font-weight:600}
 <button id="ab" onclick="appw()">Save</button>
 <button class="s" id="ar" onclick="aprs()">Back to the firmware password</button>
 <div id="am" class="m"></div></div>{{/if}}
-</main><script>
+</main><div id="tt" class="tt"></div><script src="/ap_portal/client.js"></script><script>
 var L=(navigator.language||'en').slice(0,2),T={
 uk:{h:'Wi-Fi',hs:'Мережа роутера',hn:'Мережі',ld:'Пошук…',rf:'Шукати ще раз',hc:'Підключення',ss:'Назва мережі (SSID)',pw:'Пароль',cn:'Підключити',ha:'Пароль Wi-Fi пристрою',ap:'Новий пароль, 8–63 символи',ab:'Зберегти',ar:'Повернути пароль з прошивки',
- con:'Підключено до ',none:'Не підключено до роутера',going:'Підключаюсь… Точка доступу може зникнути на кілька секунд — підключіться знову.',saved:'Збережено. Пристрій від\'єднає вас — підключіться з новим паролем.',bad:'8–63 символи або порожньо',empty:'Мереж не знайдено',name:'Вкажіть назву мережі'},
+ con:'Підключено до ',none:'Не підключено до роутера',going1:'Підключаюсь до',going2:'Сторінка може перестати відповідати. Пристрій буде тут:',viaap:'Через Wi-Fi пристрою',vianew:'У новій мережі',found:'Пристрій у мережі',open:'Відкрити',lost:'Не вдалося знайти пристрій. Спробуйте адреси:',saved:'Збережено. Пристрій від\'єднає вас — підключіться з новим паролем.',bad:'8–63 символи або порожньо',empty:'Мереж не знайдено',name:'Вкажіть назву мережі'},
 ru:{h:'Wi-Fi',hs:'Сеть роутера',hn:'Сети',ld:'Поиск…',rf:'Искать ещё раз',hc:'Подключение',ss:'Имя сети (SSID)',pw:'Пароль',cn:'Подключить',ha:'Пароль Wi-Fi устройства',ap:'Новый пароль, 8–63 символа',ab:'Сохранить',ar:'Вернуть пароль из прошивки',
- con:'Подключено к ',none:'Не подключено к роутеру',going:'Подключаюсь… Точка доступа может пропасть на несколько секунд — подключитесь снова.',saved:'Сохранено. Устройство отключит вас — подключитесь с новым паролем.',bad:'8–63 символа или пусто',empty:'Сетей не найдено',name:'Укажите имя сети'}},
-E={con:'Connected to ',none:'Not connected to the router',going:'Connecting… The access point may drop for a few seconds — join it again.',saved:'Saved. The device will drop you — join with the new password.',bad:'8–63 characters or empty',empty:'No networks found',name:'Enter the network name'},
+ con:'Подключено к ',none:'Не подключено к роутеру',going1:'Подключаюсь к',going2:'Страница может перестать отвечать. Устройство будет здесь:',viaap:'Через Wi-Fi устройства',vianew:'В новой сети',found:'Устройство в сети',open:'Открыть',lost:'Не удалось найти устройство. Попробуйте адреса:',saved:'Сохранено. Устройство отключит вас — подключитесь с новым паролем.',bad:'8–63 символа или пусто',empty:'Сетей не найдено',name:'Укажите имя сети'}},
+E={con:'Connected to ',none:'Not connected to the router',going1:'Connecting to',going2:'This page may stop answering. The device will be here:',viaap:'Via the device Wi-Fi',vianew:'On the new network',found:'The device is on',open:'Open',lost:'Could not find the device. Try these addresses:',saved:'Saved. The device will drop you — join with the new password.',bad:'8–63 characters or empty',empty:'No networks found',name:'Enter the network name'},
 X=T[L]||{},t=function(k){return X[k]||E[k]},g=function(i){return document.getElementById(i)};
 for(var k in X){var e=g(k);if(e){if(e.tagName=='INPUT')e.placeholder=X[k];else e.textContent=X[k]}}
 function bars(r){return r>-55?'▂▄▆█':r>-67?'▂▄▆':r>-78?'▂▄':'▂'}
-function post(u,d){var b=[];for(var k in d)b.push(k+'='+encodeURIComponent(d[k]));return fetch(u,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:b.join('&')})}
-function load(){fetch('/ap_portal/networks').then(function(r){return r.json()}).then(function(j){
+function toast(html,btn){var e=g('tt');e.innerHTML=html;if(btn){var b=document.createElement('a');b.className='tb';b.href=btn.url;b.textContent=btn.label;e.appendChild(b)}e.style.display='block'}
+function esc(x){var d=document.createElement('div');d.textContent=x;return d.innerHTML}
+function addrs(a){return a.map(function(x){return '<div>'+(x.kind=='ap'?t('viaap')+' «'+esc(x.ssid)+'»: ':t('vianew')+': ')+'<a href="'+x.url+'">'+x.url+'</a></div>'}).join('')}
+function load(){apPortal.networks().then(function(j){
  g('st').innerHTML='';var s=document.createElement('span');s.className=j.connected?'ok':'m';
  s.textContent=j.connected?t('con')+j.ssid+' · '+j.ip+' · '+j.rssi+' dB':t('none');g('st').appendChild(s);
  var ls=g('ls');ls.innerHTML='';if(!j.networks.length){var e=document.createElement('li');e.className='m';e.textContent=j.scanning?(X.ld||'Searching…'):t('empty');ls.appendChild(e)}
  j.networks.forEach(function(n){var li=document.createElement('li');var a=document.createElement('span');a.textContent=n.ssid;var b=document.createElement('span');b.className='m';b.textContent=(n.lock?'🔒 ':'')+bars(n.rssi);
   li.appendChild(a);li.appendChild(b);if(n.ssid==g('ss').value)li.className='sel';li.onclick=function(){g('ss').value=n.ssid;g('pw').focus();load()};ls.appendChild(li)});
  if(j.scanning)setTimeout(load,1500)}).catch(function(){setTimeout(load,3000)})}
-function scan(){post('/ap_portal/scan',{}).then(function(){setTimeout(load,800)})}
+function scan(){apPortal.scan().then(function(){setTimeout(load,800)})}
 function conn(){var s=g('ss').value;if(!s){g('cm').textContent=t('name');return}
- post('/ap_portal/connect',{ssid:s,psk:g('pw').value}).then(function(r){g('cm').textContent=r.ok?t('going'):'HTTP '+r.status})}
+ apPortal.connect(s,g('pw').value).then(function(r){g('cm').textContent='';
+  toast('<b>'+t('going1')+' «'+esc(s)+'»…</b><div class="m">'+t('going2')+'</div>'+addrs(r.addresses));
+  apPortal.watch(s,{host:r.host}).then(function(x){toast('<b>'+t('found')+' «'+esc(s)+'»: '+x.ip+'</b>',{url:x.url,label:t('open')})})
+   .catch(function(){toast('<b>'+t('lost')+'</b>'+addrs(r.addresses))})})
+ .catch(function(e){g('cm').textContent=String(e.message||e)})}
 function appw(){var p=g('ap').value;if(p&&(p.length<8||p.length>63)){g('am').textContent=t('bad');return}
- post('/ap_portal/ap_password',{password:p}).then(function(r){g('am').textContent=r.ok?t('saved'):'HTTP '+r.status})}
-function aprs(){post('/ap_portal/ap_password_reset',{}).then(function(r){g('am').textContent=r.ok?t('saved'):'HTTP '+r.status})}
+ apPortal.setApPassword(p).then(function(){g('am').textContent=t('saved')}).catch(function(e){g('am').textContent=String(e.message||e)})}
+function aprs(){apPortal.resetApPassword().then(function(){g('am').textContent=t('saved')}).catch(function(e){g('am').textContent=String(e.message||e)})}
 load();scan();
 </script></body></html>
 )HTML";
+
+// The API client for the device's own site: GET /ap_portal/client.js, then window.apPortal.
+// Draw the Wi-Fi popup in the site's own style and call these; the built-in /wifi page uses the
+// same client.
+//   apPortal.networks()                -> {scanning, connected, ssid, ip, rssi, host, ap_ip, ap_ssid,
+//                                          ap_active, networks:[{ssid, rssi, lock}]}
+//   apPortal.scan()
+//   apPortal.connect(ssid, psk)        -> {ssid, addresses:[{kind:'mdns'|'ap', url, ssid?}]}
+//   apPortal.watch(ssid, {host, timeout, interval}) -> Promise {ip, url} once the device answers
+//                                          from the new network (polls this origin and host.local)
+//   apPortal.setApPassword(pw), apPortal.resetApPassword()
+static const char CLIENT_JS[] = R"JS((function(w){var A='/ap_portal/';
+function j(u,o){return fetch(u,o).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);var t=r.headers.get('content-type')||'';return t.indexOf('json')>=0?r.json():r.text()})}
+function f(d){var b=[];for(var k in d)b.push(k+'='+encodeURIComponent(d[k]));return{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:b.join('&')}}
+var P={base:'',
+networks:function(){return j(P.base+A+'networks')},
+scan:function(){return j(P.base+A+'scan',f({}))},
+addresses:function(s,ssid){var a=[{kind:'mdns',url:'http://'+s.host+'.local/',ssid:ssid}];if(s.ap_active)a.push({kind:'ap',url:'http://'+s.ap_ip+'/',ssid:s.ap_ssid});return a},
+connect:function(ssid,psk){return P.networks().then(function(s){return j(P.base+A+'connect',f({ssid:ssid,psk:psk||''})).then(function(){return{ssid:ssid,host:s.host,addresses:P.addresses(s,ssid)}})})},
+watch:function(ssid,o){o=o||{};var t0=Date.now(),lim=o.timeout||90000,iv=o.interval||3000,u=[P.base+A+'networks'];
+ if(o.host)u.push('http://'+o.host+'.local'+A+'networks');
+ return new Promise(function(res,rej){(function tick(){if(Date.now()-t0>lim)return rej(new Error('timeout'));var i=0;
+  (function next(){if(i>=u.length)return setTimeout(tick,iv);var c=new AbortController(),k=setTimeout(function(){c.abort()},2500);
+   j(u[i++],{signal:c.signal}).then(function(s){clearTimeout(k);if(s.connected&&s.ssid===ssid&&s.ip)res({ip:s.ip,url:'http://'+s.ip+'/',state:s});else next()}).catch(function(){clearTimeout(k);next()})})()})()})},
+setApPassword:function(p){return j(P.base+A+'ap_password',f({password:p}))},
+resetApPassword:function(){return j(P.base+A+'ap_password_reset',f({}))}};
+w.apPortal=P})(window);
+)JS";
 
 }  // namespace esphome::ap_portal

@@ -356,9 +356,14 @@ static void test_wifi_routes() {
   CHECK(route(r, c) == Route::PASS);
   r.has_pass = true;
   CHECK(route(r, c) == Route::API);
-  c.wifi_path.clear();  // page off: /ap_portal/ is just another path
+  c.wifi_path.clear();  // page off, API on (a device with its own site)
   c.mode = Mode::REDIRECT;
   r.get = true;
+  r.path = "/ap_portal/networks";
+  CHECK(route(r, c) == Route::API);
+  r.path = "/wifi";
+  CHECK(route(r, c) == Route::PASS);
+  c.api = false;  // both off: /ap_portal/ is just another path
   r.path = "/ap_portal/networks";
   CHECK(route(r, c) == Route::PASS);
 }

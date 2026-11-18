@@ -104,6 +104,7 @@ struct PasswordRecord {
 
 void ApPortal::setup() {
   this->boot_ms_ = millis();
+  this->home_api_.parent = this;
   if (this->reset_pin_ != nullptr)
     this->reset_pin_->setup();
   auto *w = wifi::global_wifi_component;
@@ -157,6 +158,9 @@ void ApPortal::setup() {
   // Before web_server (setup priority 249): our handler is asked first.
   if (web_server_base::global_web_server_base != nullptr) {
     web_server_base::global_web_server_base->add_handler_without_auth(this);
+    // The API from the home network for the device's own site: behind web_server's login, if set.
+    if (this->api_from_home_)
+      web_server_base::global_web_server_base->add_handler(&this->home_api_);
   } else {
     ESP_LOGE(TAG, "web_server_base missing: no landing page");
   }
@@ -721,6 +725,7 @@ ApPortal::Classified ApPortal::classify_(AsyncWebServerRequest *request) {
   const uint32_t ap_ip = this->ap_ip_be_();
   if (fd >= 0 && ::getsockname(fd, reinterpret_cast<sockaddr *>(&local), &ll) == 0)
     r.from_ap = ap_ip != 0 && v4_of(local) == ap_ip;
+  c.from_ap = r.from_ap;
   if (fd >= 0 && ::getpeername(fd, reinterpret_cast<sockaddr *>(&peer), &pl) == 0)
     c.client_ip = v4_of(peer);
 
@@ -797,6 +802,20 @@ void ApPortal::handleRequest(AsyncWebServerRequest *request) {
 
 // ───────────────────────────── the Wi-Fi page ─────────────────────────────
 
+bool ApPortal::HomeApi::canHandle(AsyncWebServerRequest *request) const {
+  if (!this->parent->route_.api)  // also while the portal is off: the site can still change the router
+    return false;
+  char ubuf[AsyncWebServerRequest::URL_BUF_SIZE];
+  if (!ap_portal_core::has_prefix(std::string(request->url_to(ubuf).c_str()), ap_portal_core::API_PREFIX))
+    return false;
+  this->parent->cls_ = this->parent->classify_(request);
+  return !this->parent->cls_.from_ap;  // access point clients went through the portal handler
+}
+
+void ApPortal::HomeApi::handleRequest(AsyncWebServerRequest *request) {
+  this->parent->handle_api_(request, this->parent->cls_);
+}
+
 void ApPortal::send_wifi_page_(AsyncWebServerRequest *request, const Classified &c) {
   std::string body = ap_portal_core::render(BUILTIN_WIFI, this->page_vars_(c));
   auto *r = request->beginResponse(200, "text/html", body);
@@ -811,6 +830,12 @@ void ApPortal::handle_api_(AsyncWebServerRequest *request, const Classified &c) 
   const bool post = request->method() == HTTP_POST;
   if (p == a + "networks") {
     this->send_networks_(request);
+    return;
+  }
+  if (p == a + "client.js") {
+    auto *r = request->beginResponse(200, "application/javascript", std::string(CLIENT_JS));
+    r->addHeader("Cache-Control", "max-age=300");
+    request->send(r);
     return;
   }
   if (!post) {
@@ -874,6 +899,10 @@ void ApPortal::send_networks_(AsyncWebServerRequest *request) {
       ip = ip_str(si.ip.addr);
     out += ",\"ssid\":\"" + std::string(esc) + "\",\"ip\":\"" + ip + "\",\"rssi\":" + to_string(info.rssi);
   }
+  // Where to find the device again after it changes networks.
+  json_escape_into_buffer(esc, StringRef(this->ssid_snap_.c_str(), this->ssid_snap_.size()));
+  out += ",\"host\":\"" + this->host_ + "\",\"ap_ip\":\"" + ip_str(this->ap_ip_be_()) + "\",\"ap_ssid\":\"" +
+         std::string(esc) + "\",\"ap_active\":" + (this->running_ && this->ap_up_() ? "true" : "false");
   out += ",\"networks\":[";
   {
     wifi::ScanResultsLock lock(w);

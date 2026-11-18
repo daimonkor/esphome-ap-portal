@@ -85,6 +85,9 @@ ap_portal:
   on_ap_restored:               # ESPHome switched the access point off, ap_portal brought it back
   on_portal_start:
   on_portal_stop:
+  api:                          # /ap_portal/ endpoints + client.js for your own site
+    enabled: true
+    from_home: false            # also from the home network (behind web_server's login)
   wifi_page:                    # built-in /wifi page, access point clients only (gate: after the button)
     enabled: true               # scan list, connect to a router network, the access point password
     path: /wifi                 # the landing page's second button leads here unless you set `secondary`
@@ -114,6 +117,37 @@ device to a router network (saved by ESPHome, kept across reboots) and changes t
 password. Only clients of the access point get it — never the home network — and in gate mode only
 after the button. Its endpoints live under `/ap_portal/`. Turn it off with `wifi_page: {enabled:
 false}` when the device has its own Wi-Fi settings page.
+
+### API for your own site
+
+Your device's own site can draw Wi-Fi settings in its own style (a popup in a corner) and leave the
+work to the library: include `/ap_portal/client.js` and call `window.apPortal`.
+
+```html
+<script src="/ap_portal/client.js"></script>
+<script>
+apPortal.networks().then(s => render(s.networks, s.connected && s.ssid));   // your popup
+apPortal.scan();
+apPortal.connect(ssid, psk).then(r => {
+  showToast('Connecting…', r.addresses);        // http://<host>.local/ and the access point address
+  apPortal.watch(ssid, {host: r.host})          // resolves once the device answers on the new network
+    .then(x => showToast('Open', x.url));
+});
+apPortal.setApPassword('newpass99'); apPortal.resetApPassword();
+</script>
+```
+
+| Endpoint | |
+|---|---|
+| `GET /ap_portal/networks` | `{scanning, connected, ssid, ip, rssi, host, ap_ip, ap_ssid, ap_active, networks:[{ssid, rssi, lock}]}` |
+| `POST /ap_portal/scan` | start a scan |
+| `POST /ap_portal/connect` | `ssid`, `psk` — saved by ESPHome, applied 2 s after the answer |
+| `POST /ap_portal/ap_password` | `password` (empty or 8..63) |
+| `POST /ap_portal/ap_password_reset` | back to the password from `wifi: ap:` |
+
+By default only access point clients reach the API. `api: {from_home: true}` opens it to the home
+network too, behind `web_server`'s login if it has one. `wifi_page: {enabled: false}` keeps the API
+and drops the built-in page.
 
 ### Forgot the access point password
 

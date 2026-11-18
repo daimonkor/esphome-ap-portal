@@ -5,6 +5,10 @@ Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monito
 ## Unreleased
 
 ### Added
+- API for the device's own site: `/ap_portal/client.js` (`window.apPortal`: networks, scan,
+  connect, watch, setApPassword, resetApPassword) and `api: {from_home}` (behind web_server's
+  login). After a router change the Wi-Fi page shows a toast with where to find the device
+  (`<host>.local`, the access point) and, once it answers from the new network, an Open button.
 - Built-in Wi-Fi page (`wifi_page:`, `/wifi`): scan list, connect to a router network
   (`save_wifi_sta`, applied 2 s after the answer), the access point password; access point clients
   only, in gate mode after the button. The landing page's second button leads there by default.

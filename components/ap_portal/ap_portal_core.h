@@ -53,6 +53,7 @@ struct RouteConfig {
   std::string enter_path{"/enter"};
   std::vector<std::string> pass_paths;  // gate: prefixes that are never intercepted
   std::string wifi_path;                // the built-in Wi-Fi page; empty = off
+  bool api{true};                       // /ap_portal/ endpoints for access point clients
 };
 
 // The connectivity checks of phones and computers. Android, iOS/macOS, Windows, Firefox, Kindle, ...
@@ -106,10 +107,12 @@ inline Route route(const Request &r, const RouteConfig &c) {
     return Route::PASS;  // the home network never sees the portal, the Wi-Fi page included
   // The Wi-Fi page and its endpoints (GET and POST): access point clients only, in gate mode
   // only with a pass.
-  if (!c.wifi_path.empty() && (r.path == c.wifi_path || has_prefix(r.path, API_PREFIX))) {
+  const bool page = !c.wifi_path.empty() && r.path == c.wifi_path;
+  const bool api = c.api && has_prefix(r.path, API_PREFIX);
+  if (page || api) {
     if (c.mode == Mode::GATE && !r.has_pass)
       return r.get ? Route::LANDING : Route::PASS;
-    return r.path == c.wifi_path ? (r.get ? Route::WIFI : Route::PASS) : Route::API;
+    return page ? (r.get ? Route::WIFI : Route::PASS) : Route::API;
   }
   if (!r.get)
     return Route::PASS;
