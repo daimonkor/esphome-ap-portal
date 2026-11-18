@@ -166,6 +166,33 @@ By default only access point clients reach the API. `api: {from_home: true}` ope
 network too, behind `web_server`'s login if it has one. `wifi_page: {enabled: false}` keeps the API
 and drops the built-in page.
 
+### Keep the access point on router connections (experimental)
+
+> [!CAUTION]
+> **Experimental.** ESPHome switches its access point off every time the router connects (phones on
+> it drop off and Android jumps to another network). `keep_ap_on_connect: true` stops that by
+> clearing ESPHome's private `WiFiComponent::has_ap_` flag after Wi-Fi started. Checked on ESPHome
+> 2026.10.x only — on other versions the build warns; if ESPHome renames the field, the build
+> fails (nothing breaks on the device).
+
+```yaml
+ap_portal:
+  keep_ap_on_connect: true
+  reboot_timeout: 15min      # default: wifi: reboot_timeout; 0s = never
+  ap_mode: always            # or fallback: the access point only without a router
+  fallback:
+    after: 30s               # no router this long: access point up
+    off_when_idle: 60s       # router back and nobody on it this long: access point down
+```
+
+With the flag hidden ESPHome's own "reboot without a router" is off too, so ap_portal does it:
+after `reboot_timeout` without a router and with **nobody** on the access point. A client on the
+access point stops the timer; it starts over when the last one leaves or the router comes back.
+`ap_mode: fallback` implies `keep_ap_on_connect`.
+
+The first router connection after boot can still move the access point to the router's channel
+(one radio) — a client on it drops for a second.
+
 ### Forgot the access point password
 
 With `password_persist: true` a password set from the page survives reboots and reflashing, so

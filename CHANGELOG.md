@@ -15,6 +15,13 @@ Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monito
   within 30 s the previous one comes back (`previous`, `reverted` in `networks`; the toast says so).
 
 ### Added
+- **Experimental** `keep_ap_on_connect:` — ESPHome no longer switches the access point off when the
+  router connects (clears ESPHome's private `has_ap_` after Wi-Fi start; build warns outside
+  ESPHome 2026.10.x). Own `reboot_timeout:` (default `wifi: reboot_timeout`) that waits while
+  someone is on the access point. `ap_mode: always | fallback` with `fallback: {after, off_when_idle}`
+  (fallback not yet checked on hardware).
+- Passwords in `router_fallback: firmware:` and `ap_portal.set_password` marked `cv.sensitive`
+  (ESPHome 2026.12 drops the name-based redaction).
 - API errors as JSON codes (`{"error": "ssid_long"}` …), `Error.code` in client.js and
   `apPortal.check.*` with the device's rules; the popup and the Wi-Fi page check fields before
   sending and show the reason next to the field (en / uk / ru).
