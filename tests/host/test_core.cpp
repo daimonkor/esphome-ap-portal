@@ -209,9 +209,13 @@ static void test_dns() {
 
 // ------------------------------------------------------------------ quiet mode
 static void test_quiet() {
-  CHECK(quiet_wanted({false, true}));    // no router, access point up — clients do not matter
-  CHECK(!quiet_wanted({true, true}));    // router connected
-  CHECK(!quiet_wanted({false, false}));  // access point down
+  CHECK(quiet_wanted({false, true, true}));    // no router, access point up — clients do not matter
+  CHECK(!quiet_wanted({true, true, true}));    // router connected
+  CHECK(!quiet_wanted({false, false, true}));  // access point down
+  CHECK(!quiet_wanted({false, true, false}));  // just booted, ESPHome still searching
+  CHECK(lock_wanted(true, 9));
+  CHECK(!lock_wanted(true, 0));   // router channel unknown — no lock to a guess
+  CHECK(!lock_wanted(false, 9));
 
   ChannelLock l;
   CHECK(l.update(false, 7, 0) == ChannelLock::Action::NONE);

@@ -48,6 +48,7 @@ static esp_netif_t *ap_netif() { return esp_netif_get_handle_from_ifkey("WIFI_AP
 // ───────────────────────────── setup / loop ─────────────────────────────
 
 void ApPortal::setup() {
+  this->boot_ms_ = millis();
   auto *w = wifi::global_wifi_component;
   if (w == nullptr) {
     this->mark_failed();
@@ -386,7 +387,8 @@ void ApPortal::quiet_tick_(uint32_t now, bool router) {
   }
   const bool ap = this->ap_up_();
 
-  if (!this->quiet_ours_ && !cp->is_active() && ap_portal_core::quiet_wanted({router, ap})) {
+  const bool settled = this->ap_channel_ != 0 || now - this->boot_ms_ >= ap_portal_core::QUIET_BOOT_GRACE_MS;
+  if (!this->quiet_ours_ && !cp->is_active() && ap_portal_core::quiet_wanted({router, ap, settled})) {
     cp->start();
     this->quiet_ours_ = true;
     this->quiet_starts_++;
@@ -407,14 +409,11 @@ void ApPortal::quiet_tick_(uint32_t now, bool router) {
     }
   }
 
-  // Lock to the access point's own channel, not to wherever the radio is right now.
-  wifi_config_t apc{};
-  uint8_t ch = 0;
-  if (esp_wifi_get_config(WIFI_IF_AP, &apc) == ESP_OK)
-    ch = apc.ap.channel;
-  if (ch == 0)
-    ch = this->ap_channel_;
-  switch (this->lock_.update(this->quiet_ours_ && cp->is_active(), ch, now)) {
+  // Lock to the router's last channel — the access point serves there too (one radio). Never to
+  // the radio's current channel, never to a guess.
+  const uint8_t ch = this->ap_channel_;
+  const bool quiet = this->quiet_ours_ && cp->is_active();
+  switch (this->lock_.update(ap_portal_core::lock_wanted(quiet, ch), ch, now)) {
     case ap_portal_core::ChannelLock::Action::LOCK:
       this->lock_apply_(this->lock_.channel());
       break;

@@ -270,15 +270,24 @@ inline size_t dns_answer(const uint8_t *q, size_t n, uint8_t *out, size_t cap, u
 constexpr uint32_t LOCK_WIDEN_EVERY_MS = 180000;  // full search every 3 min ...
 constexpr uint32_t LOCK_WIDEN_FOR_MS = 20000;     // ... lasting 20 s
 
+constexpr uint32_t QUIET_BOOT_GRACE_MS = 30000;  // after boot ESPHome gets this long to find the router
+
 struct QuietInput {
   bool router_connected{false};
   bool ap_up{false};
+  bool settled{false};  // the router was connected once since boot, or the boot grace is over
 };
 
 // Quiet mode is wanted whenever the access point is up and there is no router — with or without
 // clients. Waiting for a client does not work: without quiet mode the radio is mostly on other
 // channels, the access point barely beacons and nobody can join (seen 2026-11-18 on the S3).
-inline bool quiet_wanted(const QuietInput &in) { return in.ap_up && !in.router_connected; }
+// Right after boot ESPHome's normal search runs first, so the router is found in seconds.
+inline bool quiet_wanted(const QuietInput &in) { return in.ap_up && in.settled && !in.router_connected; }
+
+// The radio is locked only to a known router channel. Before the router was ever connected the
+// channel is unknown; a lock to a guess (channel 1) hid the router for minutes (2026-11-18), so
+// then quiet mode runs without the lock and ESPHome's blind attempts probe every channel.
+inline bool lock_wanted(bool quiet, uint8_t router_channel) { return quiet && router_channel != 0; }
 
 class ChannelLock {
  public:

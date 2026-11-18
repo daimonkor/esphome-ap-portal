@@ -13,7 +13,8 @@ Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monito
 - Quiet mode: the access point up and no router (with or without clients) -> `captive_portal` is started so ESPHome
   stops full scans and adapter restarts; the radio is locked to the access point's channel with a
   20 s full search every 3 min; off 3 s after the router is back. The access point is raised on the
-  router's last channel, never on the channel the radio happens to scan.
+  router's last channel, never on the channel the radio happens to scan. After boot ESPHome gets
+  30 s to find the router first; until the router was connected once there is no channel lock.
 - `ssid_suffix_mac` applied before Wi-Fi starts.
 - Component skeleton: configuration schema, build checks, triggers and actions (`ap_portal.scan`,
   `ap_portal.set_password`, `ap_portal.reset_password`). The access point itself is not managed yet.
