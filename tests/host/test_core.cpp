@@ -209,10 +209,9 @@ static void test_dns() {
 
 // ------------------------------------------------------------------ quiet mode
 static void test_quiet() {
-  CHECK(quiet_wanted({false, 1, true}));
-  CHECK(!quiet_wanted({true, 1, true}));    // router connected
-  CHECK(!quiet_wanted({false, 0, true}));   // nobody on the access point
-  CHECK(!quiet_wanted({false, 1, false}));  // access point down
+  CHECK(quiet_wanted({false, true}));    // no router, access point up — clients do not matter
+  CHECK(!quiet_wanted({true, true}));    // router connected
+  CHECK(!quiet_wanted({false, false}));  // access point down
 
   ChannelLock l;
   CHECK(l.update(false, 7, 0) == ChannelLock::Action::NONE);

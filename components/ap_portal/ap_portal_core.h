@@ -272,12 +272,13 @@ constexpr uint32_t LOCK_WIDEN_FOR_MS = 20000;     // ... lasting 20 s
 
 struct QuietInput {
   bool router_connected{false};
-  uint32_t clients{0};
   bool ap_up{false};
 };
 
-// Quiet mode is wanted as soon as a client is on the access point and there is no router.
-inline bool quiet_wanted(const QuietInput &in) { return in.ap_up && in.clients > 0 && !in.router_connected; }
+// Quiet mode is wanted whenever the access point is up and there is no router — with or without
+// clients. Waiting for a client does not work: without quiet mode the radio is mostly on other
+// channels, the access point barely beacons and nobody can join (seen 2026-11-18 on the S3).
+inline bool quiet_wanted(const QuietInput &in) { return in.ap_up && !in.router_connected; }
 
 class ChannelLock {
  public:

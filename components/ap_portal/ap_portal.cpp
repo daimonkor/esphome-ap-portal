@@ -22,7 +22,6 @@ static const char *const TAG = "ap_portal";
 // Stage-1 measurements (2026-11-18) behind these numbers: see ap_portal_core.h.
 static constexpr uint32_t AP_RAISE_DELAY_MS = 500;      // let ESPHome finish what switched the AP off
 static constexpr uint32_t QUIET_END_ROUTER_MS = 3000;   // router back and stable
-static constexpr uint32_t QUIET_END_NO_CLIENT_MS = 60000;
 static constexpr uint8_t MAX_CLIENTS = 4;
 static constexpr uint8_t DHCP_FIRST = 100, DHCP_LAST = 110;
 
@@ -97,6 +96,15 @@ void ApPortal::loop() {
     return;
 
   const bool router = w->is_connected();
+  if (router) {
+    // One radio: connected, the access point serves on the router's channel. Remember it — after
+    // the router is lost the radio wanders through ESPHome's scans and its current channel means
+    // nothing.
+    uint8_t ch = 0;
+    wifi_second_chan_t sec;
+    if (esp_wifi_get_channel(&ch, &sec) == ESP_OK && ch != 0)
+      this->ap_channel_ = ch;
+  }
   this->keep_ap_(now);
   if (!this->ap_up_()) {
     this->dhcp_done_ = false;
@@ -227,11 +235,10 @@ void ApPortal::keep_ap_(uint32_t now) {
   const size_t sl = std::min<size_t>(ssid.size(), sizeof(c.ap.ssid));
   std::memcpy(c.ap.ssid, ssid.data(), sl);
   c.ap.ssid_len = sl;
-  // One radio: with the router connected the access point follows its channel anyway; without
-  // it keep the channel the radio is on, so clients are not moved.
-  uint8_t ch = 0;
-  wifi_second_chan_t sec;
-  if (esp_wifi_get_channel(&ch, &sec) != ESP_OK || ch == 0)
+  // The router's last channel (remembered in loop()), never the radio's current one: without the
+  // router the radio may be mid-scan anywhere (2026-11-18: raised on channel 5 with the router on 9).
+  uint8_t ch = this->ap_channel_;
+  if (ch == 0)
     ch = ap.has_channel() ? ap.get_channel() : 1;
   c.ap.channel = ch;
   c.ap.max_connection = MAX_CLIENTS;
@@ -377,16 +384,14 @@ void ApPortal::quiet_tick_(uint32_t now, bool router) {
     this->quiet_ours_ = false;
     ESP_LOGD(TAG, "Quiet mode ended by ESPHome (router back)");
   }
-  const uint32_t clients = this->client_count();
   const bool ap = this->ap_up_();
 
-  if (!this->quiet_ours_ && !cp->is_active() && ap_portal_core::quiet_wanted({router, clients, ap})) {
+  if (!this->quiet_ours_ && !cp->is_active() && ap_portal_core::quiet_wanted({router, ap})) {
     cp->start();
     this->quiet_ours_ = true;
     this->quiet_starts_++;
     this->router_since_ = 0;
-    this->no_clients_since_ = 0;
-    ESP_LOGI(TAG, "Quiet mode on: %u client(s), no router", (unsigned) clients);
+    ESP_LOGI(TAG, "Quiet mode on: no router, %u client(s)", (unsigned) this->client_count());
   }
   if (this->quiet_ours_) {
     if (router) {
@@ -401,24 +406,14 @@ void ApPortal::quiet_tick_(uint32_t now, bool router) {
       this->router_since_ = 0;
     }
   }
-  if (this->quiet_ours_) {
-    if (clients == 0) {
-      if (this->no_clients_since_ == 0)
-        this->no_clients_since_ = now ? now : 1;
-      if (ap_portal_core::elapsed(now, this->no_clients_since_, QUIET_END_NO_CLIENT_MS)) {
-        cp->end();
-        this->quiet_ours_ = false;
-        ESP_LOGI(TAG, "Quiet mode off: nobody on the access point");
-      }
-    } else {
-      this->no_clients_since_ = 0;
-    }
-  }
 
+  // Lock to the access point's own channel, not to wherever the radio is right now.
+  wifi_config_t apc{};
   uint8_t ch = 0;
-  wifi_second_chan_t sec;
-  if (esp_wifi_get_channel(&ch, &sec) != ESP_OK)
-    ch = 0;
+  if (esp_wifi_get_config(WIFI_IF_AP, &apc) == ESP_OK)
+    ch = apc.ap.channel;
+  if (ch == 0)
+    ch = this->ap_channel_;
   switch (this->lock_.update(this->quiet_ours_ && cp->is_active(), ch, now)) {
     case ap_portal_core::ChannelLock::Action::LOCK:
       this->lock_apply_(this->lock_.channel());

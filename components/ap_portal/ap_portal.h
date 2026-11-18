@@ -120,7 +120,7 @@ class ApPortal : public Component {
   bool quiet_ours_{false};
   uint32_t quiet_starts_{0};
   uint32_t router_since_{0};
-  uint32_t no_clients_since_{0};
+  uint8_t ap_channel_{0};  // the router's last channel; the access point is raised on it
   ap_portal_core::ChannelLock lock_;
   bool country_saved_{false};
   wifi_country_t country_orig_{};
