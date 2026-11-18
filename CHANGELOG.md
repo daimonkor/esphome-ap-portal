@@ -5,6 +5,8 @@ Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monito
 ## Unreleased
 
 ### Added
+- `/ap_portal/popup.js`: a Wi-Fi button + popup for any page (Shadow DOM, `data-accent`), and
+  `wifi_page: {ui_button: true}` to put it on ESPHome's own page for access point clients.
 - API for the device's own site: `/ap_portal/client.js` (`window.apPortal`: networks, scan,
   connect, watch, setApPassword, resetApPassword) and `api: {from_home}` (behind web_server's
   login). After a router change the Wi-Fi page shows a toast with where to find the device

@@ -717,6 +717,7 @@ ApPortal::Classified ApPortal::classify_(AsyncWebServerRequest *request) {
   if (host.has_value())
     r.host = host.value();
   r.path = c.path;
+  r.raw = request->hasParam(ap_portal_core::WRAP_RAW_ARG);
 
   // Which interface: the address the client connected to is ours on that interface.
   const int fd = httpd_req_to_sockfd(*request);
@@ -788,6 +789,13 @@ void ApPortal::handleRequest(AsyncWebServerRequest *request) {
       this->send_redirect_(request, "/");
       return;
     }
+    case ap_portal_core::Route::WRAP: {
+      std::string body = ap_portal_core::render(WRAP_PAGE, this->page_vars_(c));
+      auto *r = request->beginResponse(200, "text/html", body);
+      r->addHeader("Cache-Control", "no-store");
+      request->send(r);
+      return;
+    }
     case ap_portal_core::Route::WIFI:
       this->send_wifi_page_(request, c);
       return;
@@ -832,8 +840,11 @@ void ApPortal::handle_api_(AsyncWebServerRequest *request, const Classified &c) 
     this->send_networks_(request);
     return;
   }
-  if (p == a + "client.js") {
-    auto *r = request->beginResponse(200, "application/javascript", std::string(CLIENT_JS));
+  if (p == a + "client.js" || p == a + "popup.js") {
+    std::string js(CLIENT_JS);
+    if (p == a + "popup.js")
+      js += POPUP_JS;  // one file: the client, then the popup
+    auto *r = request->beginResponse(200, "application/javascript", js);
     r->addHeader("Cache-Control", "max-age=300");
     request->send(r);
     return;

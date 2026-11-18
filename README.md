@@ -145,6 +145,11 @@ apPortal.setApPassword('newpass99'); apPortal.resetApPassword();
 | `POST /ap_portal/ap_password` | `password` (empty or 8..63) |
 | `POST /ap_portal/ap_password_reset` | back to the password from `wifi: ap:` |
 
+A ready popup for any page: `<script src="/ap_portal/popup.js" data-accent="#3d7bff"></script>`
+adds a Wi-Fi button in the corner (Shadow DOM, the site's styles do not touch it). ESPHome's own
+page cannot load extra scripts with `local: true`; there `wifi_page: {ui_button: true}` serves `/`
+to access point clients as a frame around ESPHome's page with that button on top.
+
 By default only access point clients reach the API. `api: {from_home: true}` opens it to the home
 network too, behind `web_server`'s login if it has one. `wifi_page: {enabled: false}` keeps the API
 and drops the built-in page.

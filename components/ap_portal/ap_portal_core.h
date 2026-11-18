@@ -35,7 +35,11 @@ enum class Route : uint8_t {
   ENTER,     // gate: grant this client a pass, then 302 to "/"
   WIFI,      // the built-in Wi-Fi page (router network, access point password)
   API,       // /ap_portal/... — JSON and form endpoints of the Wi-Fi page
+  WRAP,      // "/" for an access point client: ESPHome's page in a frame + the Wi-Fi button
 };
+
+// The frame inside the wrapper asks for "/?" WRAP_RAW_ARG, which goes to web_server as usual.
+constexpr const char *WRAP_RAW_ARG = "esp";
 
 constexpr const char *API_PREFIX = "/ap_portal/";
 
@@ -45,6 +49,7 @@ struct Request {
   std::string host;      // Host header, may be empty
   std::string path;      // path without the query string
   bool has_pass{false};  // gate: this client already holds a valid pass
+  bool raw{false};       // "/?esp": the wrapped page itself
 };
 
 struct RouteConfig {
@@ -54,6 +59,7 @@ struct RouteConfig {
   std::vector<std::string> pass_paths;  // gate: prefixes that are never intercepted
   std::string wifi_path;                // the built-in Wi-Fi page; empty = off
   bool api{true};                       // /ap_portal/ endpoints for access point clients
+  bool wrap_root{false};                // ESPHome's own page gets the Wi-Fi button (ui_button)
 };
 
 // The connectivity checks of phones and computers. Android, iOS/macOS, Windows, Firefox, Kindle, ...
@@ -102,7 +108,16 @@ inline bool has_prefix(const std::string &s, const std::string &prefix) {
 
 // The single routing decision. Requests from the home network are never touched, so the
 // device's own pages behave exactly as without the portal.
+inline Route route_inner(const Request &r, const RouteConfig &c);
+
 inline Route route(const Request &r, const RouteConfig &c) {
+  const Route x = route_inner(r, c);
+  if (x == Route::PASS && c.wrap_root && r.from_ap && r.get && r.path == "/" && !r.raw && c.api)
+    return Route::WRAP;
+  return x;
+}
+
+inline Route route_inner(const Request &r, const RouteConfig &c) {
   if (!r.from_ap)
     return Route::PASS;  // the home network never sees the portal, the Wi-Fi page included
   // The Wi-Fi page and its endpoints (GET and POST): access point clients only, in gate mode

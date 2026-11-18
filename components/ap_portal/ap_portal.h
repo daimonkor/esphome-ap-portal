@@ -50,6 +50,7 @@ class ApPortal : public Component, public AsyncWebHandler {
   void add_pass_path(const std::string &p) { this->route_.pass_paths.push_back(p); }
   void set_wifi_path(const std::string &p) { this->route_.wifi_path = p; }
   void set_wifi_ap_password(bool v) { this->wifi_ap_password_ = v; }
+  void set_ui_button(bool v) { this->route_.wrap_root = v; }
   void set_api(bool enabled, bool from_home) {
     this->route_.api = enabled;
     this->api_from_home_ = enabled && from_home;

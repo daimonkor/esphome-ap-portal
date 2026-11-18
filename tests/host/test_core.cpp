@@ -368,6 +368,27 @@ static void test_wifi_routes() {
   CHECK(route(r, c) == Route::PASS);
 }
 
+static void test_wrap() {
+  RouteConfig c;
+  c.wrap_root = true;
+  Request r;
+  r.from_ap = true;
+  r.path = "/";
+  CHECK(route(r, c) == Route::WRAP);
+  r.raw = true;  // the frame itself
+  CHECK(route(r, c) == Route::PASS);
+  r.raw = false;
+  r.from_ap = false;  // home network: ESPHome's page untouched
+  CHECK(route(r, c) == Route::PASS);
+  r.from_ap = true;
+  c.mode = Mode::GATE;  // gate without a pass: the landing first
+  CHECK(route(r, c) == Route::LANDING);
+  r.has_pass = true;
+  CHECK(route(r, c) == Route::WRAP);
+  c.wrap_root = false;
+  CHECK(route(r, c) == Route::PASS);
+}
+
 int main() {
   test_timers();
   test_hosts();
@@ -381,6 +402,7 @@ int main() {
   test_claim_clients();
   test_password_reset();
   test_wifi_routes();
+  test_wrap();
   std::printf("%d checks, %d failed\n", g_checks, g_fail);
   return g_fail ? EXIT_FAILURE : EXIT_SUCCESS;
 }

@@ -138,4 +138,61 @@ resetApPassword:function(){return j(P.base+A+'ap_password_reset',f({}))}};
 w.apPortal=P})(window);
 )JS";
 
+// A Wi-Fi button in the corner + popup for any page: <script src="/ap_portal/popup.js"
+// data-accent="#3d7bff"></script>. Served after CLIENT_JS (one file). Shadow DOM: the site's styles
+// never reach it, its styles never reach the site. en / uk / ru.
+static const char POPUP_JS[] = R"JS((function(){if(window.apPortalPopup)return;
+var me=document.currentScript,acc=(me&&me.dataset.accent)||'#3d7bff',pos=(me&&me.dataset.position)||'right';
+var L=(navigator.language||'en').slice(0,2),T={
+en:{t:'Wi-Fi',st:'Router network',con:'Connected to ',none:'Not connected to the router',nets:'Networks',srch:'Searching…',again:'Search again',empty:'No networks found',ssid:'Network name (SSID)',pw:'Password',go:'Connect',name:'Enter the network name',g1:'Connecting to',g2:'This page may stop answering. The device will be here:',ap:'Via the device Wi-Fi',nw:'On the new network',found:'The device is on',open:'Open',lost:'Could not find the device. Try these addresses:',close:'Close'},
+uk:{t:'Wi-Fi',st:'Мережа роутера',con:'Підключено до ',none:'Не підключено до роутера',nets:'Мережі',srch:'Пошук…',again:'Шукати ще раз',empty:'Мереж не знайдено',ssid:'Назва мережі (SSID)',pw:'Пароль',go:'Підключити',name:'Вкажіть назву мережі',g1:'Підключаюсь до',g2:'Сторінка може перестати відповідати. Пристрій буде тут:',ap:'Через Wi-Fi пристрою',nw:'У новій мережі',found:'Пристрій у мережі',open:'Відкрити',lost:'Не вдалося знайти пристрій. Спробуйте адреси:',close:'Закрити'},
+ru:{t:'Wi-Fi',st:'Сеть роутера',con:'Подключено к ',none:'Не подключено к роутеру',nets:'Сети',srch:'Поиск…',again:'Искать ещё раз',empty:'Сетей не найдено',ssid:'Имя сети (SSID)',pw:'Пароль',go:'Подключить',name:'Укажите имя сети',g1:'Подключаюсь к',g2:'Страница может перестать отвечать. Устройство будет здесь:',ap:'Через Wi-Fi устройства',nw:'В новой сети',found:'Устройство в сети',open:'Открыть',lost:'Не удалось найти устройство. Попробуйте адреса:',close:'Закрыть'}},X=T[L]||T.en;
+var host=document.createElement('div');host.style.cssText='position:fixed;z-index:2147483000;bottom:16px;'+(pos=='left'?'left':'right')+':16px';
+document.body.appendChild(host);var R=host.attachShadow({mode:'open'});
+R.innerHTML='<style>:host{all:initial}*{box-sizing:border-box;font:15px/1.4 system-ui,-apple-system,Roboto,sans-serif}'+
+'.fab{width:52px;height:52px;border-radius:50%;border:0;background:'+acc+';color:#fff;box-shadow:0 6px 20px rgba(0,0,0,.3);cursor:pointer;display:grid;place-items:center}'+
+'.fab svg{width:26px;height:26px;fill:currentColor}.bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);align-items:flex-end;justify-content:center}'+
+'.bg.on{display:flex}.p{width:100%;max-width:440px;max-height:88vh;overflow:auto;background:#fff;color:#1b2230;border-radius:20px 20px 0 0;padding:18px}'+
+'@media(min-width:600px){.bg{align-items:center}.p{border-radius:20px}}@media(prefers-color-scheme:dark){.p{background:#151922;color:#f2f4f8}input{background:#0b0d12!important;color:#f2f4f8}}'+
+'h2{font-size:18px;font-weight:700;margin:0 0 12px;display:flex;justify-content:space-between;align-items:center}h3{font-size:14px;font-weight:700;margin:14px 0 6px;opacity:.8}.x{cursor:pointer;opacity:.6;background:none;border:0;color:inherit;font-size:20px}'+
+'.m{font-size:13px;opacity:.7}.ok{color:#22a559}ul{list-style:none;margin:0;padding:0}li{display:flex;justify-content:space-between;padding:10px 4px;border-bottom:1px solid rgba(127,127,127,.18);cursor:pointer}'+
+'li.sel{color:'+acc+';font-weight:600}input{width:100%;padding:11px;border-radius:12px;border:1px solid rgba(127,127,127,.35);margin:0 0 8px;background:#fff}'+
+'button.b{width:100%;padding:12px;border-radius:12px;border:0;background:'+acc+';color:#fff;font-weight:700;cursor:pointer}button.s{width:100%;padding:10px;border-radius:12px;border:1px solid rgba(127,127,127,.35);background:none;color:inherit;font-weight:600;cursor:pointer;margin-top:8px}'+
+'.tt{margin-top:12px;padding:12px;border-radius:12px;background:rgba(127,127,127,.12);display:none}.tt a{color:'+acc+';font-weight:600;text-decoration:none}.tt a.o{display:block;text-align:center;margin-top:8px;background:'+acc+';color:#fff;padding:10px;border-radius:12px}</style>'+
+'<button class="fab" title="Wi-Fi"><svg viewBox="0 0 24 24"><path d="M12 21l3.6-4.8a6 6 0 0 0-7.2 0zm0-18C7.95 3 4.21 4.34 1.2 6.6L3 9a15 15 0 0 1 18 0l1.8-2.4A18.9 18.9 0 0 0 12 3zm0 6a12 12 0 0 0-7.2 2.4l1.8 2.4a9 9 0 0 1 10.8 0l1.8-2.4A12 12 0 0 0 12 9z"/></svg></button>'+
+'<div class="bg"><div class="p"><h2><span>'+X.t+'</span><button class="x" aria-label="'+X.close+'">✕</button></h2>'+
+'<div class="m" id="st">…</div><h3>'+X.nets+'</h3><ul id="ls"><li class="m">'+X.srch+'</li></ul><button class="s" id="rf">'+X.again+'</button>'+
+'<h3>'+X.st+'</h3><input id="ss" placeholder="'+X.ssid+'" autocapitalize="none" autocomplete="off"><input id="pw" type="password" placeholder="'+X.pw+'">'+
+'<button class="b" id="go">'+X.go+'</button><div class="m" id="cm"></div><div class="tt" id="tt"></div></div></div>';
+var $=function(s){return R.querySelector(s)},bg=$('.bg'),open=false;
+function esc(x){var d=document.createElement('div');d.textContent=x;return d.innerHTML}
+function bars(r){return r>-55?'▂▄▆█':r>-67?'▂▄▆':r>-78?'▂▄':'▂'}
+function addrs(a){return a.map(function(x){return '<div>'+(x.kind=='ap'?X.ap+' «'+esc(x.ssid)+'»: ':X.nw+': ')+'<a href="'+x.url+'">'+x.url+'</a></div>'}).join('')}
+function toast(h,btn){var e=$('#tt');e.innerHTML=h+(btn?'<a class="o" href="'+btn+'">'+X.open+'</a>':'');e.style.display='block'}
+function load(){if(!open)return;apPortal.networks().then(function(j){
+ $('#st').innerHTML=j.connected?'<span class="ok">'+esc(X.con+j.ssid+' · '+j.ip+' · '+j.rssi+' dB')+'</span>':esc(X.none);
+ var ls=$('#ls');ls.innerHTML='';if(!j.networks.length)ls.innerHTML='<li class="m">'+(j.scanning?X.srch:X.empty)+'</li>';
+ j.networks.forEach(function(n){var li=document.createElement('li');li.innerHTML='<span>'+esc(n.ssid)+'</span><span class="m">'+(n.lock?'🔒 ':'')+bars(n.rssi)+'</span>';
+  if(n.ssid==$('#ss').value)li.className='sel';li.onclick=function(){$('#ss').value=n.ssid;$('#pw').focus();load()};ls.appendChild(li)});
+ if(j.scanning)setTimeout(load,1500)}).catch(function(){setTimeout(load,3000)})}
+function show(v){open=v;bg.classList.toggle('on',v);if(v){apPortal.scan().then(function(){setTimeout(load,800)});load()}}
+$('.fab').onclick=function(){show(true)};$('.x').onclick=function(){show(false)};bg.onclick=function(e){if(e.target===bg)show(false)};
+$('#rf').onclick=function(){apPortal.scan().then(function(){setTimeout(load,800)})};
+$('#go').onclick=function(){var s=$('#ss').value;if(!s){$('#cm').textContent=X.name;return}$('#cm').textContent='';
+ apPortal.connect(s,$('#pw').value).then(function(r){toast('<b>'+X.g1+' «'+esc(s)+'»…</b><div class="m">'+X.g2+'</div>'+addrs(r.addresses));
+  apPortal.watch(s,{host:r.host}).then(function(x){toast('<b>'+X.found+' «'+esc(s)+'»: '+x.ip+'</b>',x.url)}).catch(function(){toast('<b>'+X.lost+'</b>'+addrs(r.addresses))})})
+ .catch(function(e){$('#cm').textContent=String(e.message||e)})};
+window.apPortalPopup={open:function(){show(true)},close:function(){show(false)}};
+})();
+)JS";
+
+// "/" for an access point client with ui_button: ESPHome's own page in a frame, the Wi-Fi button
+// on top. The frame asks for "/?esp", which web_server answers as usual.
+static const char WRAP_PAGE[] = R"HTML(<!DOCTYPE html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>{{title}}</title>
+<style>html,body{margin:0;height:100%;overflow:hidden}iframe{border:0;width:100%;height:100%}</style></head>
+<body><iframe src="/?esp=1" title="{{title}}"></iframe>
+<script src="/ap_portal/popup.js" data-accent="{{accent_color}}"></script></body></html>
+)HTML";
+
 }  // namespace esphome::ap_portal

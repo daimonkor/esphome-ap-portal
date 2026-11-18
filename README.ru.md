@@ -127,6 +127,10 @@ ap_portal:
 `scan()`, `connect(ssid, psk)` (вернёт адреса, где искать устройство после смены сети),
 `watch(ssid, {host})` (дождётся устройства в новой сети и вернёт его адрес), `setApPassword()`,
 `resetApPassword()`. Адреса и формат ответов — в [английском README](README.md#api-for-your-own-site).
+Готовый попап для любой страницы: `<script src="/ap_portal/popup.js" data-accent="#3d7bff"></script>`
+добавляет в угол кнопку Wi-Fi (Shadow DOM, стили сайта его не трогают). В штатную страницу ESPHome
+с `local: true` свой скрипт не добавить — там `wifi_page: {ui_button: true}` отдаёт клиентам точки
+доступа `/` как рамку вокруг страницы ESPHome с этой кнопкой поверх.
 По умолчанию API доступен только клиентам точки доступа; `api: {from_home: true}` открывает его и
 домашней сети (под логином `web_server`, если он задан).
 

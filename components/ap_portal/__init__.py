@@ -157,6 +157,9 @@ WIFI_PAGE_SCHEMA = cv.Schema(
         cv.Optional(CONF_ENABLED, default=True): cv.boolean,
         cv.Optional(CONF_PATH, default="/wifi"): _url_path,
         cv.Optional(CONF_AP_PASSWORD, default=True): cv.boolean,
+        # ESPHome's own page (web_server) gets a Wi-Fi button in the corner for access point
+        # clients: "/" is served as a frame around it. For a device without its own site.
+        cv.Optional("ui_button", default=False): cv.boolean,
     }
 )
 
@@ -427,6 +430,7 @@ async def to_code(config):
     if wifi_page[CONF_ENABLED]:
         cg.add(var.set_wifi_path(wifi_page[CONF_PATH]))
         cg.add(var.set_wifi_ap_password(wifi_page[CONF_AP_PASSWORD]))
+        cg.add(var.set_ui_button(wifi_page["ui_button"]))
     if CONF_SECONDARY in landing:
         sec = landing[CONF_SECONDARY]
         cg.add(var.add_static_var("secondary_label", sec[CONF_LABEL]))
