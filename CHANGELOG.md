@@ -13,6 +13,9 @@ Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monito
   within 30 s the previous one comes back (`previous`, `reverted` in `networks`; the toast says so).
 
 ### Added
+- On the device's own Wi-Fi the result card does not offer to open the new router address (it
+  cannot be reached from there): it says to carry on and lets you copy the address
+  (`watch()` resolves with `onAp`).
 - Addresses on the landing page and the switching card are copied on tap ("Copied"), with a small
   ↗ to open: the phone's "Sign in to network" window cannot open addresses of another network.
 - Show / hide toggle (eye) in the password fields of the Wi-Fi popup and page.
