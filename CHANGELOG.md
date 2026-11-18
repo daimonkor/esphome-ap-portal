@@ -5,6 +5,8 @@ Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monito
 ## Unreleased
 
 ### Fixed
+- After boot, quiet mode starts at the first failed router attempt instead of waiting out the 30 s
+  grace: ESPHome restarted the adapter three times meanwhile and the access point blinked.
 - Connecting to another router network from the Wi-Fi page did nothing while the device was
   connected: ESPHome's `save_wifi_sta()` only saves then. Now only the router connection is dropped
   after it (`esp_wifi_disconnect`) — the access point stays up, unlike `wifi.configure`'s

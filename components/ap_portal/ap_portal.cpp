@@ -565,7 +565,11 @@ void ApPortal::quiet_tick_(uint32_t now, bool router) {
   }
   const bool ap = this->ap_up_();
 
-  const bool settled = this->ap_channel_ != 0 || now - this->boot_ms_ >= ap_portal_core::QUIET_BOOT_GRACE_MS;
+  // Settled: the router was connected once, or the boot grace is over, or a connection attempt has
+  // already failed (wrong password, not found) — then waiting only lets ESPHome restart the adapter
+  // and the access point blinks (2026-11-18: three restarts in the first 30 s after boot).
+  const bool settled = this->ap_channel_ != 0 || now - this->boot_ms_ >= ap_portal_core::QUIET_BOOT_GRACE_MS ||
+                       ap_portal_core::sta_error_kind(this->sta_reason_.load())[0] != 0;
   if (!this->quiet_ours_ && !cp->is_active() && ap_portal_core::quiet_wanted({router, ap, settled})) {
     cp->start();
     this->quiet_ours_ = true;
