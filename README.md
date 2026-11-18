@@ -156,6 +156,12 @@ adds a Wi-Fi button in the corner (Shadow DOM, the site's styles do not touch it
 page cannot load extra scripts with `local: true`; there `wifi_page: {ui_button: true}` serves `/`
 to access point clients as a frame around ESPHome's page with that button on top.
 
+Errors come back as `400` with `{"error": "<code>"}` and reject the promise with `Error.code`:
+`ssid_empty`, `ssid_long` (over 32 bytes), `psk_length` (not empty and not 8..64),
+`ap_password_length` (not empty and not 8..63 printable). `apPortal.check.ssid(s)`, `.psk(p)`,
+`.apPassword(p)` apply the same rules before sending (`''` = fine), so your popup can show its own
+text next to the field.
+
 By default only access point clients reach the API. `api: {from_home: true}` opens it to the home
 network too, behind `web_server`'s login if it has one. `wifi_page: {enabled: false}` keeps the API
 and drops the built-in page.

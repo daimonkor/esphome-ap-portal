@@ -1101,7 +1101,7 @@ void ApPortal::handle_api_(AsyncWebServerRequest *request, const Classified &c) 
     return;
   }
   if (!post) {
-    request->send(405, "text/plain", "Use POST");
+    this->send_api_error_(request, "method", 405);
     return;
   }
   if (p == a + "scan") {
@@ -1110,8 +1110,12 @@ void ApPortal::handle_api_(AsyncWebServerRequest *request, const Classified &c) 
   } else if (p == a + "connect") {
     const std::string ssid = request->arg("ssid");
     const std::string psk = request->arg("psk");
-    if (ssid.empty() || ssid.size() > 32 || psk.size() > 64 || (!psk.empty() && psk.size() < 8)) {
-      request->send(400, "text/plain", "SSID 1..32, password empty or 8..64");
+    const char *err = ssid.empty()                                        ? "ssid_empty"
+                      : ssid.size() > 32                                    ? "ssid_long"
+                      : (psk.size() > 64 || (!psk.empty() && psk.size() < 8)) ? "psk_length"
+                                                                            : nullptr;
+    if (err != nullptr) {
+      this->send_api_error_(request, err);
       return;
     }
     const bool later = request->arg("when") == "later";
@@ -1133,7 +1137,7 @@ void ApPortal::handle_api_(AsyncWebServerRequest *request, const Classified &c) 
   } else if (this->wifi_ap_password_ && p == a + "ap_password") {
     const std::string pw = request->arg("password");
     if (!ap_portal_core::valid_ap_password(pw)) {
-      request->send(400, "text/plain", "Empty or 8..63 printable characters");
+      this->send_api_error_(request, "ap_password_length");
       return;
     }
     std::lock_guard<std::mutex> g(this->mu_);
@@ -1145,10 +1149,25 @@ void ApPortal::handle_api_(AsyncWebServerRequest *request, const Classified &c) 
     this->http_ap_pw_reset_ = true;
     this->http_ap_pw_pending_ = true;
   } else {
-    request->send(404, "text/plain", "Not found");
+    this->send_api_error_(request, "not_found", 404);
     return;
   }
-  request->send(200, "text/plain", "OK");
+  auto *ok = request->beginResponse(200, "application/json", std::string("{\"ok\":true}"));
+  request->send(ok);
+}
+
+// API errors as JSON: {"error": "<code>"} — the page and the device's own site show their own text.
+void ApPortal::send_api_error_(AsyncWebServerRequest *request, const char *code, int status) {
+  std::string body = std::string("{\"error\":\"") + code + "\"}";
+  if (status == 400) {
+    auto *r = request->beginResponse(400, "application/json", body);
+    request->send(r);
+    return;
+  }
+  httpd_req_t *h = *request;  // 405 is not among the codes AsyncWebServerRequest knows
+  httpd_resp_set_status(h, status == 404 ? "404 Not Found" : "405 Method Not Allowed");
+  httpd_resp_set_type(h, "application/json");
+  httpd_resp_send(h, body.c_str(), body.size());
 }
 
 // Scan results and the router connection as JSON. Hidden and duplicate networks are skipped the

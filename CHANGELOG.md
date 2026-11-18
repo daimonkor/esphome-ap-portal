@@ -13,6 +13,9 @@ Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monito
   within 30 s the previous one comes back (`previous`, `reverted` in `networks`; the toast says so).
 
 ### Added
+- API errors as JSON codes (`{"error": "ssid_long"}` …), `Error.code` in client.js and
+  `apPortal.check.*` with the device's rules; the popup and the Wi-Fi page check fields before
+  sending and show the reason next to the field (en / uk / ru).
 - `router_fallback:` — a network saved from the page that gives no router within `timeout` (45 s)
   after a restart: back to the previous network, then to the YAML one (each optional, each step
   `timeout` long), else "none" (the access point stays). Hook `on_router_fallback` (to, ssid). The

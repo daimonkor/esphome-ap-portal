@@ -163,6 +163,7 @@ class ApPortal : public Component, public AsyncWebHandler {
   void send_wifi_page_(AsyncWebServerRequest *request, const Classified &c);
   void handle_api_(AsyncWebServerRequest *request, const Classified &c);
   void send_networks_(AsyncWebServerRequest *request);
+  void send_api_error_(AsyncWebServerRequest *request, const char *code, int status = 400);
   void http_requests_tick_(uint32_t now);
   void switch_start_(const std::string &ssid, const std::string &psk, uint32_t now,
                      const std::string *old_ssid = nullptr, const std::string *old_psk = nullptr);
