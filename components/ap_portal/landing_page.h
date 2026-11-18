@@ -53,7 +53,7 @@ main{max-width:420px;margin:0 auto;padding:16px}
 h1{font-size:20px;margin:6px 0 14px}h2{font-size:15px;margin:0 0 10px}
 .m{font-size:13px;opacity:.7}.ok{color:#22a559}.er{color:#e5484d}
 ul{list-style:none;margin:0;padding:0}li{display:flex;justify-content:space-between;align-items:center;padding:11px 4px;border-bottom:1px solid rgba(127,127,127,.18);cursor:pointer}
-li:last-child{border:0}li.sel{color:{{accent_color}};font-weight:600}
+li:last-child{border:0}li.sel{color:{{accent_color}};font-weight:600}.lk{font-size:12px;margin-left:6px;opacity:.8}
 input{width:100%;box-sizing:border-box;font:inherit;padding:12px;border-radius:12px;border:1px solid rgba(127,127,127,.35);margin:0 0 10px;background:#fff}
 button{width:100%;font:inherit;font-weight:700;padding:13px;border-radius:12px;border:0;background:{{accent_color}};color:{{accent_text}};cursor:pointer}
 button.s{background:transparent;color:inherit;border:1px solid rgba(127,127,127,.35);font-weight:600;margin-top:8px}
@@ -79,10 +79,10 @@ main{padding-bottom:140px}
 </main><div id="tt" class="tt"></div><script src="/ap_portal/client.js"></script><script>
 var L=(navigator.language||'en').slice(0,2),T={
 uk:{h:'Wi-Fi',hs:'Мережа роутера',hn:'Мережі',ld:'Пошук…',rf:'Шукати ще раз',hc:'Підключення',ss:'Назва мережі (SSID)',pw:'Пароль',cn:'Підключити',ha:'Пароль Wi-Fi пристрою',ap:'Новий пароль, 8–63 символи',ab:'Зберегти',ar:'Повернути пароль з прошивки',
- con:'Підключено до ',none:'Не підключено до роутера',going1:'Підключаюсь до',going2:'Сторінка може перестати відповідати. Пристрій буде тут:',viaap:'Через Wi-Fi пристрою',vianew:'У новій мережі',found:'Пристрій у мережі',open:'Відкрити',lost:'Не вдалося знайти пристрій. Спробуйте адреси:',saved:'Збережено. Пристрій від\'єднає вас — підключіться з новим паролем.',bad:'8–63 символи або порожньо',empty:'Мереж не знайдено',name:'Вкажіть назву мережі'},
+ wrong_password:'невірний пароль',not_found:'мережу не знайдено',failed:'помилка підключення',err:'Не вдається підключитися до',stay:'Пристрій лишається на своїй точці доступу — виправте і підключіть знову.',con:'Підключено до ',none:'Не підключено до роутера',going1:'Підключаюсь до',going2:'Сторінка може перестати відповідати. Пристрій буде тут:',viaap:'Через Wi-Fi пристрою',vianew:'У новій мережі',found:'Пристрій у мережі',open:'Відкрити',lost:'Не вдалося знайти пристрій. Спробуйте адреси:',saved:'Збережено. Пристрій від\'єднає вас — підключіться з новим паролем.',bad:'8–63 символи або порожньо',empty:'Мереж не знайдено',name:'Вкажіть назву мережі'},
 ru:{h:'Wi-Fi',hs:'Сеть роутера',hn:'Сети',ld:'Поиск…',rf:'Искать ещё раз',hc:'Подключение',ss:'Имя сети (SSID)',pw:'Пароль',cn:'Подключить',ha:'Пароль Wi-Fi устройства',ap:'Новый пароль, 8–63 символа',ab:'Сохранить',ar:'Вернуть пароль из прошивки',
- con:'Подключено к ',none:'Не подключено к роутеру',going1:'Подключаюсь к',going2:'Страница может перестать отвечать. Устройство будет здесь:',viaap:'Через Wi-Fi устройства',vianew:'В новой сети',found:'Устройство в сети',open:'Открыть',lost:'Не удалось найти устройство. Попробуйте адреса:',saved:'Сохранено. Устройство отключит вас — подключитесь с новым паролем.',bad:'8–63 символа или пусто',empty:'Сетей не найдено',name:'Укажите имя сети'}},
-E={con:'Connected to ',none:'Not connected to the router',going1:'Connecting to',going2:'This page may stop answering. The device will be here:',viaap:'Via the device Wi-Fi',vianew:'On the new network',found:'The device is on',open:'Open',lost:'Could not find the device. Try these addresses:',saved:'Saved. The device will drop you — join with the new password.',bad:'8–63 characters or empty',empty:'No networks found',name:'Enter the network name'},
+ wrong_password:'неверный пароль',not_found:'сеть не найдена',failed:'ошибка подключения',err:'Не удаётся подключиться к',stay:'Устройство остаётся на своей точке доступа — исправьте и подключите снова.',con:'Подключено к ',none:'Не подключено к роутеру',going1:'Подключаюсь к',going2:'Страница может перестать отвечать. Устройство будет здесь:',viaap:'Через Wi-Fi устройства',vianew:'В новой сети',found:'Устройство в сети',open:'Открыть',lost:'Не удалось найти устройство. Попробуйте адреса:',saved:'Сохранено. Устройство отключит вас — подключитесь с новым паролем.',bad:'8–63 символа или пусто',empty:'Сетей не найдено',name:'Укажите имя сети'}},
+E={wrong_password:'wrong password',not_found:'network not found',failed:'connection failed',err:'Cannot connect to',stay:'The device stays on its own Wi-Fi — fix it and connect again.',con:'Connected to ',none:'Not connected to the router',going1:'Connecting to',going2:'This page may stop answering. The device will be here:',viaap:'Via the device Wi-Fi',vianew:'On the new network',found:'The device is on',open:'Open',lost:'Could not find the device. Try these addresses:',saved:'Saved. The device will drop you — join with the new password.',bad:'8–63 characters or empty',empty:'No networks found',name:'Enter the network name'},
 X=T[L]||{},t=function(k){return X[k]||E[k]},g=function(i){return document.getElementById(i)};
 for(var k in X){var e=g(k);if(e){if(e.tagName=='INPUT')e.placeholder=X[k];else e.textContent=X[k]}}
 function bars(r){return r>-55?'▂▄▆█':r>-67?'▂▄▆':r>-78?'▂▄':'▂'}
@@ -91,22 +91,22 @@ function esc(x){var d=document.createElement('div');d.textContent=x;return d.inn
 function addrs(a){return a.map(function(x){return '<div>'+(x.kind=='ap'?t('viaap')+' «'+esc(x.ssid)+'»: ':t('vianew')+': ')+'<a href="'+x.url+'">'+x.url+'</a></div>'}).join('')}
 function load(){apPortal.networks().then(function(j){
  g('st').innerHTML='';var s=document.createElement('span');s.className=j.connected?'ok':'m';
- s.textContent=j.connected?t('con')+j.ssid+' · '+j.ip+' · '+j.rssi+' dB':t('none');g('st').appendChild(s);
+ s.textContent=j.connected?t('con')+j.ssid+' · '+j.ip+' · '+j.rssi+' dBm':t('none');g('st').appendChild(s);
  var ls=g('ls');ls.innerHTML='';if(!j.networks.length){var e=document.createElement('li');e.className='m';e.textContent=j.scanning?(X.ld||'Searching…'):t('empty');ls.appendChild(e)}
- j.networks.forEach(function(n){var li=document.createElement('li');var a=document.createElement('span');a.textContent=n.ssid;var b=document.createElement('span');b.className='m';b.textContent=(n.lock?'🔒 ':'')+bars(n.rssi);
+ j.networks.forEach(function(n){var li=document.createElement('li');var a=document.createElement('span');a.textContent=n.ssid;if(n.lock){var l=document.createElement('span');l.className='lk';l.textContent='🔒';a.appendChild(l)}var b=document.createElement('span');b.className='m';b.textContent=bars(n.rssi);
   li.appendChild(a);li.appendChild(b);if(n.ssid==g('ss').value)li.className='sel';li.onclick=function(){g('ss').value=n.ssid;g('pw').focus();load()};ls.appendChild(li)});
  if(j.scanning)setTimeout(load,1500)}).catch(function(){setTimeout(load,3000)})}
 function scan(){apPortal.scan().then(function(){setTimeout(load,800)})}
+function follow(p){toast('<b>'+t('going1')+' «'+esc(p.ssid)+'»…</b><div class="m">'+t('going2')+'</div>'+addrs(p.addresses));
+ apPortal.watch(p.ssid,{host:p.host,since:p.t}).then(function(x){apPortal.pending.clear();toast('<b>'+t('found')+' «'+esc(p.ssid)+'»: '+x.ip+'</b>',{url:x.url,label:t('open')})})
+ .catch(function(e){apPortal.pending.clear();if(e.code)toast('<b class="er">'+t('err')+' «'+esc(p.ssid)+'»: '+t(e.code)+'</b><div class="m">'+t('stay')+'</div>');else toast('<b>'+t('lost')+'</b>'+addrs(p.addresses))})}
 function conn(){var s=g('ss').value;if(!s){g('cm').textContent=t('name');return}
- apPortal.connect(s,g('pw').value).then(function(r){g('cm').textContent='';
-  toast('<b>'+t('going1')+' «'+esc(s)+'»…</b><div class="m">'+t('going2')+'</div>'+addrs(r.addresses));
-  apPortal.watch(s,{host:r.host}).then(function(x){toast('<b>'+t('found')+' «'+esc(s)+'»: '+x.ip+'</b>',{url:x.url,label:t('open')})})
-   .catch(function(){toast('<b>'+t('lost')+'</b>'+addrs(r.addresses))})})
+ apPortal.connect(s,g('pw').value).then(function(r){g('cm').textContent='';var p={ssid:s,host:r.host,addresses:r.addresses,t:Date.now()};apPortal.pending.save(p);follow(p)})
  .catch(function(e){g('cm').textContent=String(e.message||e)})}
 function appw(){var p=g('ap').value;if(p&&(p.length<8||p.length>63)){g('am').textContent=t('bad');return}
  apPortal.setApPassword(p).then(function(){g('am').textContent=t('saved')}).catch(function(e){g('am').textContent=String(e.message||e)})}
 function aprs(){apPortal.resetApPassword().then(function(){g('am').textContent=t('saved')}).catch(function(e){g('am').textContent=String(e.message||e)})}
-load();scan();
+load();scan();(function(){var p=apPortal.pending.load();if(p)follow(p)})();
 </script></body></html>
 )HTML";
 
@@ -128,11 +128,15 @@ networks:function(){return j(P.base+A+'networks')},
 scan:function(){return j(P.base+A+'scan',f({}))},
 addresses:function(s,ssid){var a=[{kind:'mdns',url:'http://'+s.host+'.local/',ssid:ssid}];if(s.ap_active)a.push({kind:'ap',url:'http://'+s.ap_ip+'/',ssid:s.ap_ssid});return a},
 connect:function(ssid,psk){return P.networks().then(function(s){return j(P.base+A+'connect',f({ssid:ssid,psk:psk||''})).then(function(){return{ssid:ssid,host:s.host,addresses:P.addresses(s,ssid)}})})},
-watch:function(ssid,o){o=o||{};var t0=Date.now(),lim=o.timeout||90000,iv=o.interval||3000,u=[P.base+A+'networks'];
+watch:function(ssid,o){o=o||{};var t0=o.since||Date.now(),lim=o.timeout||90000,iv=o.interval||3000,u=[P.base+A+'networks'],bad=0;
  if(o.host)u.push('http://'+o.host+'.local'+A+'networks');
  return new Promise(function(res,rej){(function tick(){if(Date.now()-t0>lim)return rej(new Error('timeout'));var i=0;
   (function next(){if(i>=u.length)return setTimeout(tick,iv);var c=new AbortController(),k=setTimeout(function(){c.abort()},2500);
-   j(u[i++],{signal:c.signal}).then(function(s){clearTimeout(k);if(s.connected&&s.ssid===ssid&&s.ip)res({ip:s.ip,url:'http://'+s.ip+'/',state:s});else next()}).catch(function(){clearTimeout(k);next()})})()})()})},
+   j(u[i++],{signal:c.signal}).then(function(s){clearTimeout(k);if(s.connected&&s.ssid===ssid&&s.ip)return res({ip:s.ip,url:'http://'+s.ip+'/',state:s});
+    if(s.target===ssid&&s.sta_error){if(++bad>=2){var e=new Error(s.sta_error);e.code=s.sta_error;return rej(e)}}else bad=0;next()}).catch(function(){clearTimeout(k);next()})})()})()})},
+pending:{key:'apPortalWatch',save:function(o){try{localStorage.setItem(this.key,JSON.stringify(o))}catch(e){}},
+ load:function(){try{var o=JSON.parse(localStorage.getItem(this.key)||'null');return o&&Date.now()-o.t<180000?o:null}catch(e){return null}},
+ clear:function(){try{localStorage.removeItem(this.key)}catch(e){}}},
 setApPassword:function(p){return j(P.base+A+'ap_password',f({password:p}))},
 resetApPassword:function(){return j(P.base+A+'ap_password_reset',f({}))}};
 w.apPortal=P})(window);
@@ -144,18 +148,18 @@ w.apPortal=P})(window);
 static const char POPUP_JS[] = R"JS((function(){if(window.apPortalPopup)return;
 var me=document.currentScript,acc=(me&&me.dataset.accent)||'#3d7bff',pos=(me&&me.dataset.position)||'right';
 var L=(navigator.language||'en').slice(0,2),T={
-en:{t:'Wi-Fi',st:'Router network',con:'Connected to ',none:'Not connected to the router',nets:'Networks',srch:'Searching…',again:'Search again',empty:'No networks found',ssid:'Network name (SSID)',pw:'Password',go:'Connect',name:'Enter the network name',g1:'Connecting to',g2:'This page may stop answering. The device will be here:',ap:'Via the device Wi-Fi',nw:'On the new network',found:'The device is on',open:'Open',lost:'Could not find the device. Try these addresses:',close:'Close'},
-uk:{t:'Wi-Fi',st:'Мережа роутера',con:'Підключено до ',none:'Не підключено до роутера',nets:'Мережі',srch:'Пошук…',again:'Шукати ще раз',empty:'Мереж не знайдено',ssid:'Назва мережі (SSID)',pw:'Пароль',go:'Підключити',name:'Вкажіть назву мережі',g1:'Підключаюсь до',g2:'Сторінка може перестати відповідати. Пристрій буде тут:',ap:'Через Wi-Fi пристрою',nw:'У новій мережі',found:'Пристрій у мережі',open:'Відкрити',lost:'Не вдалося знайти пристрій. Спробуйте адреси:',close:'Закрити'},
-ru:{t:'Wi-Fi',st:'Сеть роутера',con:'Подключено к ',none:'Не подключено к роутеру',nets:'Сети',srch:'Поиск…',again:'Искать ещё раз',empty:'Сетей не найдено',ssid:'Имя сети (SSID)',pw:'Пароль',go:'Подключить',name:'Укажите имя сети',g1:'Подключаюсь к',g2:'Страница может перестать отвечать. Устройство будет здесь:',ap:'Через Wi-Fi устройства',nw:'В новой сети',found:'Устройство в сети',open:'Открыть',lost:'Не удалось найти устройство. Попробуйте адреса:',close:'Закрыть'}},X=T[L]||T.en;
+en:{wrong_password:'wrong password',not_found:'network not found',failed:'connection failed',err:'Cannot connect to',stay:'The device stays on its own Wi-Fi — fix it and connect again.',t:'Wi-Fi',st:'Router network',con:'Connected to ',none:'Not connected to the router',nets:'Networks',srch:'Searching…',again:'Search again',empty:'No networks found',ssid:'Network name (SSID)',pw:'Password',go:'Connect',name:'Enter the network name',g1:'Connecting to',g2:'This page may stop answering. The device will be here:',ap:'Via the device Wi-Fi',nw:'On the new network',found:'The device is on',open:'Open',lost:'Could not find the device. Try these addresses:',close:'Close'},
+uk:{wrong_password:'невірний пароль',not_found:'мережу не знайдено',failed:'помилка підключення',err:'Не вдається підключитися до',stay:'Пристрій лишається на своїй точці доступу — виправте і підключіть знову.',t:'Wi-Fi',st:'Мережа роутера',con:'Підключено до ',none:'Не підключено до роутера',nets:'Мережі',srch:'Пошук…',again:'Шукати ще раз',empty:'Мереж не знайдено',ssid:'Назва мережі (SSID)',pw:'Пароль',go:'Підключити',name:'Вкажіть назву мережі',g1:'Підключаюсь до',g2:'Сторінка може перестати відповідати. Пристрій буде тут:',ap:'Через Wi-Fi пристрою',nw:'У новій мережі',found:'Пристрій у мережі',open:'Відкрити',lost:'Не вдалося знайти пристрій. Спробуйте адреси:',close:'Закрити'},
+ru:{wrong_password:'неверный пароль',not_found:'сеть не найдена',failed:'ошибка подключения',err:'Не удаётся подключиться к',stay:'Устройство остаётся на своей точке доступа — исправьте и подключите снова.',t:'Wi-Fi',st:'Сеть роутера',con:'Подключено к ',none:'Не подключено к роутеру',nets:'Сети',srch:'Поиск…',again:'Искать ещё раз',empty:'Сетей не найдено',ssid:'Имя сети (SSID)',pw:'Пароль',go:'Подключить',name:'Укажите имя сети',g1:'Подключаюсь к',g2:'Страница может перестать отвечать. Устройство будет здесь:',ap:'Через Wi-Fi устройства',nw:'В новой сети',found:'Устройство в сети',open:'Открыть',lost:'Не удалось найти устройство. Попробуйте адреса:',close:'Закрыть'}},X=T[L]||T.en;
 var host=document.createElement('div');host.style.cssText='position:fixed;z-index:2147483000;bottom:16px;'+(pos=='left'?'left':'right')+':16px';
 document.body.appendChild(host);var R=host.attachShadow({mode:'open'});
 R.innerHTML='<style>:host{all:initial}*{box-sizing:border-box;font:15px/1.4 system-ui,-apple-system,Roboto,sans-serif}'+
 '.fab{width:52px;height:52px;border-radius:50%;border:0;background:'+acc+';color:#fff;box-shadow:0 6px 20px rgba(0,0,0,.3);cursor:pointer;display:grid;place-items:center}'+
 '.fab svg{width:26px;height:26px;fill:currentColor}.bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);align-items:flex-end;justify-content:center}'+
 '.bg.on{display:flex}.p{width:100%;max-width:440px;max-height:88vh;overflow:auto;background:#fff;color:#1b2230;border-radius:20px 20px 0 0;padding:18px}'+
-'@media(min-width:600px){.bg{align-items:center}.p{border-radius:20px}}@media(prefers-color-scheme:dark){.p{background:#151922;color:#f2f4f8}input{background:#0b0d12!important;color:#f2f4f8}}'+
-'h2{font-size:18px;font-weight:700;margin:0 0 12px;display:flex;justify-content:space-between;align-items:center}h3{font-size:14px;font-weight:700;margin:14px 0 6px;opacity:.8}.x{cursor:pointer;opacity:.6;background:none;border:0;color:inherit;font-size:20px}'+
-'.m{font-size:13px;opacity:.7}.ok{color:#22a559}ul{list-style:none;margin:0;padding:0}li{display:flex;justify-content:space-between;padding:10px 4px;border-bottom:1px solid rgba(127,127,127,.18);cursor:pointer}'+
+'.p{max-height:85vh;max-height:calc(100dvh - 12px);overscroll-behavior:contain;-webkit-overflow-scrolling:touch}@media(min-width:600px){.bg{align-items:center}.p{border-radius:20px}}@media(prefers-color-scheme:dark){.p{background:#151922;color:#f2f4f8}input{background:#0b0d12!important;color:#f2f4f8}}'+
+'h2{font-size:18px;font-weight:700;margin:0 0 12px;display:flex;justify-content:space-between;align-items:center}h3{font-size:14px;font-weight:700;margin:14px 0 6px;opacity:.8}h2 *,h3 *{font-weight:inherit;font-size:inherit}.x{cursor:pointer;opacity:.6;background:none;border:0;color:inherit;font-size:20px}'+
+'.m{font-size:13px;opacity:.7}.ok{color:#22a559}.er{color:#e5484d}.lk{font-size:12px;margin-left:6px;opacity:.8}ul{list-style:none;margin:0;padding:0}li{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 4px;border-bottom:1px solid rgba(127,127,127,.18);cursor:pointer}'+
 'li.sel{color:'+acc+';font-weight:600}input{width:100%;padding:11px;border-radius:12px;border:1px solid rgba(127,127,127,.35);margin:0 0 8px;background:#fff}'+
 'button.b{width:100%;padding:12px;border-radius:12px;border:0;background:'+acc+';color:#fff;font-weight:700;cursor:pointer}button.s{width:100%;padding:10px;border-radius:12px;border:1px solid rgba(127,127,127,.35);background:none;color:inherit;font-weight:600;cursor:pointer;margin-top:8px}'+
 '.tt{margin-top:12px;padding:12px;border-radius:12px;background:rgba(127,127,127,.12);display:none}.tt a{color:'+acc+';font-weight:600;text-decoration:none}.tt a.o{display:block;text-align:center;margin-top:8px;background:'+acc+';color:#fff;padding:10px;border-radius:12px}</style>'+
@@ -170,18 +174,21 @@ function bars(r){return r>-55?'▂▄▆█':r>-67?'▂▄▆':r>-78?'▂▄':'�
 function addrs(a){return a.map(function(x){return '<div>'+(x.kind=='ap'?X.ap+' «'+esc(x.ssid)+'»: ':X.nw+': ')+'<a href="'+x.url+'">'+x.url+'</a></div>'}).join('')}
 function toast(h,btn){var e=$('#tt');e.innerHTML=h+(btn?'<a class="o" href="'+btn+'">'+X.open+'</a>':'');e.style.display='block'}
 function load(){if(!open)return;apPortal.networks().then(function(j){
- $('#st').innerHTML=j.connected?'<span class="ok">'+esc(X.con+j.ssid+' · '+j.ip+' · '+j.rssi+' dB')+'</span>':esc(X.none);
+ $('#st').innerHTML=j.connected?'<span class="ok">'+esc(X.con+j.ssid+' · '+j.ip+' · '+j.rssi+' dBm')+'</span>':esc(X.none);
  var ls=$('#ls');ls.innerHTML='';if(!j.networks.length)ls.innerHTML='<li class="m">'+(j.scanning?X.srch:X.empty)+'</li>';
- j.networks.forEach(function(n){var li=document.createElement('li');li.innerHTML='<span>'+esc(n.ssid)+'</span><span class="m">'+(n.lock?'🔒 ':'')+bars(n.rssi)+'</span>';
+ j.networks.forEach(function(n){var li=document.createElement('li');li.innerHTML='<span>'+esc(n.ssid)+(n.lock?'<span class="lk">🔒</span>':'')+'</span><span class="m">'+bars(n.rssi)+'</span>';
   if(n.ssid==$('#ss').value)li.className='sel';li.onclick=function(){$('#ss').value=n.ssid;$('#pw').focus();load()};ls.appendChild(li)});
  if(j.scanning)setTimeout(load,1500)}).catch(function(){setTimeout(load,3000)})}
 function show(v){open=v;bg.classList.toggle('on',v);if(v){apPortal.scan().then(function(){setTimeout(load,800)});load()}}
 $('.fab').onclick=function(){show(true)};$('.x').onclick=function(){show(false)};bg.onclick=function(e){if(e.target===bg)show(false)};
 $('#rf').onclick=function(){apPortal.scan().then(function(){setTimeout(load,800)})};
+function follow(p){toast('<b>'+X.g1+' «'+esc(p.ssid)+'»…</b><div class="m">'+X.g2+'</div>'+addrs(p.addresses));
+ apPortal.watch(p.ssid,{host:p.host,since:p.t}).then(function(x){apPortal.pending.clear();toast('<b>'+X.found+' «'+esc(p.ssid)+'»: '+x.ip+'</b>',x.url)})
+ .catch(function(e){apPortal.pending.clear();if(e.code)toast('<b class="er">'+X.err+' «'+esc(p.ssid)+'»: '+(X[e.code]||e.code)+'</b><div class="m">'+X.stay+'</div>');else toast('<b>'+X.lost+'</b>'+addrs(p.addresses))})}
 $('#go').onclick=function(){var s=$('#ss').value;if(!s){$('#cm').textContent=X.name;return}$('#cm').textContent='';
- apPortal.connect(s,$('#pw').value).then(function(r){toast('<b>'+X.g1+' «'+esc(s)+'»…</b><div class="m">'+X.g2+'</div>'+addrs(r.addresses));
-  apPortal.watch(s,{host:r.host}).then(function(x){toast('<b>'+X.found+' «'+esc(s)+'»: '+x.ip+'</b>',x.url)}).catch(function(){toast('<b>'+X.lost+'</b>'+addrs(r.addresses))})})
+ apPortal.connect(s,$('#pw').value).then(function(r){var p={ssid:s,host:r.host,addresses:r.addresses,t:Date.now()};apPortal.pending.save(p);follow(p)})
  .catch(function(e){$('#cm').textContent=String(e.message||e)})};
+(function(){var p=apPortal.pending.load();if(p){show(true);follow(p)}})();
 window.apPortalPopup={open:function(){show(true)},close:function(){show(false)}};
 })();
 )JS";

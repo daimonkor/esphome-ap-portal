@@ -596,4 +596,28 @@ class HoldDetector {
   uint32_t since_{0};
 };
 
+// ───────────────────────────── router connection errors ─────────────────────────────
+// The reason of the last WIFI_EVENT_STA_DISCONNECTED, for the Wi-Fi page: why the new router
+// network does not take. Our own leave (8, when the device switches networks) is no error.
+inline const char *sta_error_kind(uint8_t reason) {
+  switch (reason) {
+    case 0:
+    case 8:  // ASSOC_LEAVE: we left
+      return "";
+    case 2:    // AUTH_EXPIRE
+    case 14:   // MIC_FAILURE
+    case 15:   // 4WAY_HANDSHAKE_TIMEOUT
+    case 202:  // AUTH_FAIL
+    case 204:  // HANDSHAKE_TIMEOUT
+      return "wrong_password";
+    case 201:  // NO_AP_FOUND
+    case 210:  // NO_AP_FOUND_W_COMPATIBLE_SECURITY
+    case 211:  // NO_AP_FOUND_IN_AUTHMODE_THRESHOLD
+    case 212:  // NO_AP_FOUND_IN_RSSI_THRESHOLD
+      return "not_found";
+    default:
+      return "failed";
+  }
+}
+
 }  // namespace ap_portal_core

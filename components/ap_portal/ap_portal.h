@@ -234,6 +234,8 @@ class ApPortal : public Component, public AsyncWebHandler {
   bool http_sta_pending_{false};
   std::string http_sta_ssid_, http_sta_psk_;
   uint32_t http_sta_at_{0};
+  std::string target_ssid_;                 // the network the page asked for (under mu_)
+  std::atomic<uint8_t> sta_reason_{0};      // last router disconnect reason, from the event task
   bool http_ap_pw_pending_{false};
   bool http_ap_pw_reset_{false};
   std::string http_ap_pw_;

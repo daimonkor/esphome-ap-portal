@@ -5,6 +5,10 @@ Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monito
 ## Unreleased
 
 ### Added
+- The Wi-Fi page and popup say why a router network does not take (wrong password, not found,
+  failed — from the last disconnect reason, `target` / `sta_error` in `networks`), keep waiting
+  for the device after the page was closed and opened again, scroll in the bottom sheet; the lock
+  sits next to the network name; signal in dBm.
 - `/ap_portal/popup.js`: a Wi-Fi button + popup for any page (Shadow DOM, `data-accent`), and
   `wifi_page: {ui_button: true}` to put it on ESPHome's own page for access point clients.
 - API for the device's own site: `/ap_portal/client.js` (`window.apPortal`: networks, scan,

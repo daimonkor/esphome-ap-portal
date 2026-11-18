@@ -389,6 +389,15 @@ static void test_wrap() {
   CHECK(route(r, c) == Route::PASS);
 }
 
+static void test_sta_errors() {
+  CHECK(std::string(sta_error_kind(0)).empty());
+  CHECK(std::string(sta_error_kind(8)).empty());
+  CHECK(std::string(sta_error_kind(15)) == "wrong_password");
+  CHECK(std::string(sta_error_kind(204)) == "wrong_password");
+  CHECK(std::string(sta_error_kind(201)) == "not_found");
+  CHECK(std::string(sta_error_kind(205)) == "failed");
+}
+
 int main() {
   test_timers();
   test_hosts();
@@ -403,6 +412,7 @@ int main() {
   test_password_reset();
   test_wifi_routes();
   test_wrap();
+  test_sta_errors();
   std::printf("%d checks, %d failed\n", g_checks, g_fail);
   return g_fail ? EXIT_FAILURE : EXIT_SUCCESS;
 }

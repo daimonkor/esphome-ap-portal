@@ -301,6 +301,12 @@ void ApPortal::on_wifi_event_(void *arg, esp_event_base_t, int32_t id, void *dat
     case WIFI_EVENT_SCAN_DONE:
       ev.type = EV_SCAN_DONE;
       break;
+    case WIFI_EVENT_STA_DISCONNECTED:
+      self->sta_reason_ = static_cast<wifi_event_sta_disconnected_t *>(data)->reason;
+      return;
+    case WIFI_EVENT_STA_CONNECTED:
+      self->sta_reason_ = 0;
+      return;
     default:
       return;
   }
@@ -866,6 +872,8 @@ void ApPortal::handle_api_(AsyncWebServerRequest *request, const Classified &c) 
     std::lock_guard<std::mutex> g(this->mu_);
     this->http_sta_ssid_ = ssid;
     this->http_sta_psk_ = psk;
+    this->target_ssid_ = ssid;  // the page asks how this one goes
+    this->sta_reason_ = 0;
     this->http_sta_at_ = millis() + PASSWORD_APPLY_DELAY_MS;  // the answer leaves first
     this->http_sta_pending_ = true;
   } else if (this->wifi_ap_password_ && p == a + "ap_password") {
@@ -914,6 +922,18 @@ void ApPortal::send_networks_(AsyncWebServerRequest *request) {
   json_escape_into_buffer(esc, StringRef(this->ssid_snap_.c_str(), this->ssid_snap_.size()));
   out += ",\"host\":\"" + this->host_ + "\",\"ap_ip\":\"" + ip_str(this->ap_ip_be_()) + "\",\"ap_ssid\":\"" +
          std::string(esc) + "\",\"ap_active\":" + (this->running_ && this->ap_up_() ? "true" : "false");
+  {
+    std::string target;
+    {
+      std::lock_guard<std::mutex> g(this->mu_);
+      target = this->target_ssid_;
+    }
+    if (!target.empty()) {
+      json_escape_into_buffer(esc, StringRef(target.c_str(), target.size()));
+      out += ",\"target\":\"" + std::string(esc) + "\",\"sta_error\":\"" +
+             (connected ? "" : ap_portal_core::sta_error_kind(this->sta_reason_.load())) + "\"";
+    }
+  }
   out += ",\"networks\":[";
   {
     wifi::ScanResultsLock lock(w);
