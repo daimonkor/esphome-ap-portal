@@ -625,6 +625,71 @@ void ApPortal::lock_release_() {
   ESP_LOGD(TAG, "Radio channel lock released: %s", esp_err_to_name(e));
 }
 
+// ───────────────────────────── switching the router network ─────────────────────────────
+// Like ESPHome's wifi.configure: save_wifi_sta() alone does not reconnect while the device is
+// connected (2026-11-18: saved, nothing happened), so Wi-Fi is switched off and on around it. If the
+// new network does not take within SWITCH_TIMEOUT_MS, the previous one is put back.
+static constexpr uint32_t SWITCH_TIMEOUT_MS = 30000;
+
+static std::string connected_ssid() {
+  wifi_ap_record_t info{};
+  if (esp_wifi_sta_get_ap_info(&info) != ESP_OK)
+    return {};
+  const char *s = reinterpret_cast<const char *>(info.ssid);
+  return std::string(s, strnlen(s, sizeof(info.ssid)));
+}
+
+void ApPortal::switch_start_(const std::string &ssid, const std::string &psk, uint32_t now) {
+  auto *w = wifi::global_wifi_component;
+  if (!this->switch_pending_) {  // a second request keeps the first fallback
+    const auto old = w->get_sta();
+    this->switch_old_ssid_ = std::string(old.get_ssid().c_str(), old.get_ssid().size());
+    this->switch_old_psk_ = std::string(old.get_password().c_str(), old.get_password().size());
+  }
+  ESP_LOGI(TAG, "Wi-Fi page: switching to the router network '%s' (fallback '%s' in %u s)", ssid.c_str(),
+           this->switch_old_ssid_.c_str(), (unsigned) (SWITCH_TIMEOUT_MS / 1000));
+  {
+    std::lock_guard<std::mutex> g(this->mu_);
+    this->switch_reverted_ = false;
+    this->switch_previous_ = this->switch_old_ssid_;
+  }
+  this->switch_target_ = ssid;
+  this->switch_pending_ = true;
+  this->switch_deadline_ = now + SWITCH_TIMEOUT_MS;
+  w->disable();
+  w->save_wifi_sta(ssid, psk);  // saved by ESPHome, kept across reboots
+  w->enable();
+}
+
+void ApPortal::switch_tick_(uint32_t now) {
+  if (!this->switch_pending_)
+    return;
+  auto *w = wifi::global_wifi_component;
+  if (w->is_connected() && connected_ssid() == this->switch_target_) {
+    ESP_LOGI(TAG, "Wi-Fi page: connected to '%s'", this->switch_target_.c_str());
+    this->switch_pending_ = false;
+    return;
+  }
+  if (!ap_portal_core::reached(now, this->switch_deadline_))
+    return;
+  this->switch_pending_ = false;
+  if (this->switch_old_ssid_.empty() || this->switch_old_ssid_ == this->switch_target_) {
+    ESP_LOGW(TAG, "Wi-Fi page: '%s' did not connect, nothing to fall back to", this->switch_target_.c_str());
+    return;
+  }
+  ESP_LOGW(TAG, "Wi-Fi page: '%s' did not connect in %u s (%s), back to '%s'", this->switch_target_.c_str(),
+           (unsigned) (SWITCH_TIMEOUT_MS / 1000), ap_portal_core::sta_error_kind(this->sta_reason_.load()),
+           this->switch_old_ssid_.c_str());
+  {
+    std::lock_guard<std::mutex> g(this->mu_);
+    this->switch_reverted_ = true;
+  }
+  w->disable();
+  w->save_wifi_sta(this->switch_old_ssid_, this->switch_old_psk_);
+  w->enable();
+  this->switch_old_psk_.clear();
+}
+
 // ───────────────────────────── password reset on the spot ─────────────────────────────
 
 static const char *reset_reason_name(esp_reset_reason_t r) {
@@ -930,8 +995,18 @@ void ApPortal::send_networks_(AsyncWebServerRequest *request) {
     }
     if (!target.empty()) {
       json_escape_into_buffer(esc, StringRef(target.c_str(), target.size()));
+      const bool on_target = connected && connected_ssid() == target;
       out += ",\"target\":\"" + std::string(esc) + "\",\"sta_error\":\"" +
-             (connected ? "" : ap_portal_core::sta_error_kind(this->sta_reason_.load())) + "\"";
+             (on_target ? "" : ap_portal_core::sta_error_kind(this->sta_reason_.load())) + "\"";
+      std::string prev;
+      bool reverted;
+      {
+        std::lock_guard<std::mutex> g(this->mu_);
+        prev = this->switch_previous_;
+        reverted = this->switch_reverted_;
+      }
+      json_escape_into_buffer(esc, StringRef(prev.c_str(), prev.size()));
+      out += ",\"previous\":\"" + std::string(esc) + "\",\"reverted\":" + (reverted ? "true" : "false");
     }
   }
   out += ",\"networks\":[";
@@ -981,10 +1056,9 @@ void ApPortal::http_requests_tick_(uint32_t now) {
   }
   if (scan)
     this->scan();
-  if (sta) {
-    ESP_LOGI(TAG, "Wi-Fi page: connecting to the router network '%s'", ssid.c_str());
-    wifi::global_wifi_component->save_wifi_sta(ssid, psk);  // saved by ESPHome, kept across reboots
-  }
+  if (sta)
+    this->switch_start_(ssid, psk, now);
+  this->switch_tick_(now);
   if (ap_pw) {
     if (ap_reset)
       this->reset_password();

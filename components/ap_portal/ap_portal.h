@@ -151,6 +151,8 @@ class ApPortal : public Component, public AsyncWebHandler {
   void handle_api_(AsyncWebServerRequest *request, const Classified &c);
   void send_networks_(AsyncWebServerRequest *request);
   void http_requests_tick_(uint32_t now);
+  void switch_start_(const std::string &ssid, const std::string &psk, uint32_t now);
+  void switch_tick_(uint32_t now);
   void forward_(AsyncWebServerRequest *request);
   ap_portal_core::Vars page_vars_(const Classified &c);
   void refresh_lambda_vars_(uint32_t now);
@@ -235,6 +237,12 @@ class ApPortal : public Component, public AsyncWebHandler {
   std::string http_sta_ssid_, http_sta_psk_;
   uint32_t http_sta_at_{0};
   std::string target_ssid_;                 // the network the page asked for (under mu_)
+  // switching the router network, loop() only; previous/reverted also read by HTTP (under mu_)
+  bool switch_pending_{false};
+  uint32_t switch_deadline_{0};
+  std::string switch_target_, switch_old_ssid_, switch_old_psk_;
+  std::string switch_previous_;
+  bool switch_reverted_{false};
   std::atomic<uint8_t> sta_reason_{0};      // last router disconnect reason, from the event task
   bool http_ap_pw_pending_{false};
   bool http_ap_pw_reset_{false};

@@ -4,6 +4,12 @@ Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monito
 
 ## Unreleased
 
+### Fixed
+- Connecting to another router network from the Wi-Fi page did nothing while the device was
+  connected: ESPHome's `save_wifi_sta()` only saves then. Now Wi-Fi is switched off and on around
+  it, like `wifi.configure`; if the new network does not connect within 30 s the previous one comes
+  back (`previous`, `reverted` in `networks`; the toast says so).
+
 ### Added
 - The Wi-Fi page and popup say why a router network does not take (wrong password, not found,
   failed — from the last disconnect reason, `target` / `sta_error` in `networks`), keep waiting
