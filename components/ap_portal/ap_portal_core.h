@@ -620,4 +620,47 @@ inline const char *sta_error_kind(uint8_t reason) {
   }
 }
 
+// ───────────────────────────── access point only without a router (ap_mode: fallback) ─────────────────────────────
+// Up once there has been no router for `after`. Router back: down only after nobody has been on the
+// access point for `idle` — a phone in the middle of something is never thrown off.
+class FallbackAp {
+ public:
+  FallbackAp(uint32_t after_ms = 30000, uint32_t idle_ms = 60000) : after_(after_ms), idle_(idle_ms) {}
+  void set(uint32_t after_ms, uint32_t idle_ms) {
+    this->after_ = after_ms;
+    this->idle_ = idle_ms;
+  }
+  // Returns whether the access point should be up now.
+  bool update(bool router, uint32_t clients, uint32_t now) {
+    if (!router) {
+      this->idle_since_ = 0;
+      if (this->no_router_since_ == 0)
+        this->no_router_since_ = now ? now : 1;
+      if (!this->on_ && elapsed(now, this->no_router_since_, this->after_))
+        this->on_ = true;
+      return this->on_;
+    }
+    this->no_router_since_ = 0;
+    if (!this->on_)
+      return false;
+    if (clients > 0) {
+      this->idle_since_ = 0;
+      return true;
+    }
+    if (this->idle_since_ == 0)
+      this->idle_since_ = now ? now : 1;
+    if (elapsed(now, this->idle_since_, this->idle_)) {
+      this->on_ = false;
+      this->idle_since_ = 0;
+    }
+    return this->on_;
+  }
+  bool on() const { return this->on_; }
+
+ protected:
+  uint32_t after_, idle_;
+  uint32_t no_router_since_{0}, idle_since_{0};
+  bool on_{false};
+};
+
 }  // namespace ap_portal_core

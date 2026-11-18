@@ -56,6 +56,12 @@ class ApPortal : public Component, public AsyncWebHandler {
     this->api_from_home_ = enabled && from_home;
   }
   void set_power_cycles(uint8_t n) { this->power_cycles_ = n; }
+  void set_keep_ap_on_connect(bool v) { this->keep_ap_on_connect_ = v; }
+  void set_ap_fallback(uint32_t after_ms, uint32_t idle_ms) {
+    this->ap_fallback_ = true;
+    this->keep_ap_on_connect_ = true;  // the library decides when the access point goes
+    this->fallback_ap_.set(after_ms, idle_ms);
+  }
   void set_router_fallback(uint32_t timeout_ms, bool previous, bool firmware) {
     this->fb_timeout_ = timeout_ms;
     this->fb_previous_ = previous;
@@ -271,6 +277,12 @@ class ApPortal : public Component, public AsyncWebHandler {
   uint32_t later_idle_since_{0};
   std::string later_ssid_, later_psk_, later_old_ssid_, later_old_psk_, later_ssid_snap_;
   bool http_sta_later_{false};
+  // keep_ap_on_connect / ap_mode: fallback
+  bool keep_ap_on_connect_{false};
+  bool has_ap_hidden_{false};
+  bool ap_fallback_{false};
+  bool fallback_was_{true};
+  ap_portal_core::FallbackAp fallback_ap_;
   // router fallback (loop() only)
   bool fb_enabled_{true}, fb_previous_{true}, fb_firmware_{true};
   uint32_t fb_timeout_{45000};

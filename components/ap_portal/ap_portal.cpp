@@ -87,6 +87,18 @@ template<typename Tag, typename Tag::type M> struct HandlersRobber {
   friend typename Tag::type handlers_member(Tag) { return M; }
 };
 template struct HandlersRobber<HandlersTag, &web_server_base::WebServerBase::handlers_>;
+
+// keep_ap_on_connect: ESPHome switches its access point off on every router connection when it
+// "has" one (WiFiComponent::has_ap_, set by wifi: ap:). Clearing that private flag after Wi-Fi
+// started keeps the access point — ap_portal raises and drops it itself. Same instantiation trick.
+struct HasApTag {
+  using type = bool wifi::WiFiComponent::*;
+};
+HasApTag::type has_ap_member(HasApTag);
+template<typename Tag, typename Tag::type M> struct HasApRobber {
+  friend typename Tag::type has_ap_member(Tag) { return M; }
+};
+template struct HasApRobber<HasApTag, &wifi::WiFiComponent::has_ap_>;
 }  // namespace
 
 static constexpr uint32_t PASSWORD_APPLY_DELAY_MS = 2000;  // the HTTP answer leaves first
@@ -214,6 +226,16 @@ void ApPortal::loop() {
     return;
   this->refresh_lambda_vars_(now);
 
+  if (this->keep_ap_on_connect_ && !this->has_ap_hidden_) {
+    // After setup: ESPHome's Wi-Fi start already used the flag. From now on it never switches the
+    // access point off on a router connection; with the flag also goes its "no reboot while an
+    // access point exists" rule, so reboot_timeout is switched off the same way.
+    w->*has_ap_member(HasApTag{}) = false;
+    w->set_reboot_timeout(0);
+    this->has_ap_hidden_ = true;
+    ESP_LOGI(TAG, "Access point kept on router connections (keep_ap_on_connect)");
+  }
+
   const bool router = w->is_connected();
   if (router) {
     // One radio: connected, the access point serves on the router's channel. Remember it — after
@@ -225,6 +247,22 @@ void ApPortal::loop() {
     wifi_ap_record_t info{};
     if (esp_wifi_sta_get_ap_info(&info) == ESP_OK && info.primary != 0)
       this->ap_channel_ = info.primary;
+  }
+  if (this->ap_fallback_) {
+    const bool want = this->fallback_ap_.update(router, this->client_count(), now);
+    if (want != this->fallback_was_) {
+      this->fallback_was_ = want;
+      ESP_LOGI(TAG, "%s", want ? "No router: access point up (ap_mode: fallback)"
+                              : "Router back and nobody on the access point: access point down");
+    }
+    if (!want) {
+      if (this->ap_up_())
+        this->stop_ap_();
+      this->dhcp_done_ = false;
+      this->dns_close_();
+      this->quiet_tick_(now, router);
+      return;
+    }
   }
   this->keep_ap_(now);
   if (!this->ap_up_()) {

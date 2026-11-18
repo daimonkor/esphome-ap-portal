@@ -398,6 +398,25 @@ static void test_sta_errors() {
   CHECK(std::string(sta_error_kind(205)) == "failed");
 }
 
+static void test_fallback_ap() {
+  FallbackAp f(30000, 60000);
+  CHECK(!f.update(true, 0, 1000));      // router: no access point
+  CHECK(!f.update(false, 0, 2000));     // router gone, not long enough
+  CHECK(!f.update(false, 0, 31999));
+  CHECK(f.update(false, 0, 32000));     // 30 s without a router: up
+  CHECK(f.update(true, 1, 40000));      // router back, a phone on it: stays
+  CHECK(f.update(true, 1, 200000));
+  CHECK(f.update(true, 0, 200001));     // the phone left: idle starts
+  CHECK(f.update(true, 0, 260000));
+  CHECK(!f.update(true, 0, 260001));    // 60 s idle: down
+  CHECK(!f.update(false, 0, 270000));   // gone again: waits `after` again
+  CHECK(f.update(false, 0, 300000));
+  CHECK(f.update(true, 0, 310000));     // back, idle...
+  CHECK(f.update(false, 0, 320000));    // ...gone again before idle ran out: stays up
+  CHECK(f.update(true, 0, 330000));
+  CHECK(!f.update(true, 0, 390000));    // idle counted from the return
+}
+
 int main() {
   test_timers();
   test_hosts();
@@ -413,6 +432,7 @@ int main() {
   test_wifi_routes();
   test_wrap();
   test_sta_errors();
+  test_fallback_ap();
   std::printf("%d checks, %d failed\n", g_checks, g_fail);
   return g_fail ? EXIT_FAILURE : EXIT_SUCCESS;
 }

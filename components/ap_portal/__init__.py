@@ -62,6 +62,11 @@ CONF_ON_LANDING = "on_landing"
 CONF_ON_ENTER = "on_enter"
 CONF_WIFI_PAGE = "wifi_page"
 CONF_API = "api"
+CONF_KEEP_AP_ON_CONNECT = "keep_ap_on_connect"
+CONF_AP_MODE = "ap_mode"
+CONF_FALLBACK = "fallback"
+CONF_AFTER = "after"
+CONF_OFF_WHEN_IDLE = "off_when_idle"
 CONF_ROUTER_FALLBACK = "router_fallback"
 CONF_TIMEOUT = "timeout"
 CONF_PREVIOUS = "previous"
@@ -267,6 +272,17 @@ CONFIG_SCHEMA = cv.All(
                 {cv.Optional(CONF_ENABLED, default=True): cv.boolean}
             ),
             cv.Optional(CONF_LANDING, default={}): cv.All(LANDING_SCHEMA, _validate_landing),
+            # EXPERIMENTAL: ESPHome switches the access point off on every router connection;
+            # with this it does not (ap_portal manages it). Turns ESPHome's reboot_timeout off.
+            cv.Optional(CONF_KEEP_AP_ON_CONNECT, default=False): cv.boolean,
+            # always: the access point runs whenever `active`; fallback: only without a router
+            cv.Optional(CONF_AP_MODE, default="always"): cv.one_of("always", "fallback", lower=True),
+            cv.Optional(CONF_FALLBACK, default={}): cv.Schema(
+                {
+                    cv.Optional(CONF_AFTER, default="30s"): cv.positive_time_period_milliseconds,
+                    cv.Optional(CONF_OFF_WHEN_IDLE, default="60s"): cv.positive_time_period_milliseconds,
+                }
+            ),
             cv.Optional(CONF_WIFI_PAGE, default={}): WIFI_PAGE_SCHEMA,
             # /ap_portal/ endpoints and client.js for the device's own site
             cv.Optional(CONF_API, default={}): cv.Schema(
@@ -465,6 +481,10 @@ async def to_code(config):
         cg.add(var.add_static_var("icon_svg", _read(landing[CONF_ICON_SVG])))
     cg.add(var.add_static_var("primary_label", landing.get(CONF_PRIMARY_LABEL, "Open device page")))
     cg.add(var.add_static_var("primary_default", "" if CONF_PRIMARY_LABEL in landing else "1"))
+    cg.add(var.set_keep_ap_on_connect(config[CONF_KEEP_AP_ON_CONNECT]))
+    if config[CONF_AP_MODE] == "fallback":
+        apf = config[CONF_FALLBACK]
+        cg.add(var.set_ap_fallback(apf[CONF_AFTER].total_milliseconds, apf[CONF_OFF_WHEN_IDLE].total_milliseconds))
     fb = config[CONF_ROUTER_FALLBACK]
     firmware = fb[CONF_FIRMWARE]
     cg.add(var.set_router_fallback(fb[CONF_TIMEOUT].total_milliseconds, fb[CONF_PREVIOUS], bool(firmware)))
