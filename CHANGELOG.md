@@ -13,6 +13,10 @@ Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monito
   within 30 s the previous one comes back (`previous`, `reverted` in `networks`; the toast says so).
 
 ### Added
+- "Save, connect later" next to "Connect now": the network is saved (a restart uses it) but the
+  device stays on its current network while someone is on the access point; it switches 10 s after
+  the last client leaves, or on Connect now / `apPortal.apply()`; Cancel (`apPortal.cancel()`)
+  puts the previous network back. `networks().later` shows what is waiting.
 - On the device's own Wi-Fi the result card does not offer to open the new router address (it
   cannot be reached from there): it says to carry on and lets you copy the address
   (`watch()` resolves with `onAp`).

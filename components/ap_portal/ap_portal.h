@@ -151,7 +151,12 @@ class ApPortal : public Component, public AsyncWebHandler {
   void handle_api_(AsyncWebServerRequest *request, const Classified &c);
   void send_networks_(AsyncWebServerRequest *request);
   void http_requests_tick_(uint32_t now);
-  void switch_start_(const std::string &ssid, const std::string &psk, uint32_t now);
+  void switch_start_(const std::string &ssid, const std::string &psk, uint32_t now,
+                     const std::string *old_ssid = nullptr, const std::string *old_psk = nullptr);
+  void later_save_(const std::string &ssid, const std::string &psk);
+  void later_apply_(uint32_t now, const char *why);
+  void later_cancel_();
+  void later_tick_(uint32_t now);
   void switch_tick_(uint32_t now);
   void switch_reconnect_(const std::string &ssid, const std::string &psk);
   void forward_(AsyncWebServerRequest *request);
@@ -243,6 +248,12 @@ class ApPortal : public Component, public AsyncWebHandler {
   uint32_t switch_deadline_{0};
   std::string switch_target_, switch_old_ssid_, switch_old_psk_;
   std::string switch_previous_;
+  // "save, connect later" (loop() only; later_ssid_snap_ also read by HTTP under mu_)
+  bool later_pending_{false};
+  uint32_t later_idle_since_{0};
+  std::string later_ssid_, later_psk_, later_old_ssid_, later_old_psk_, later_ssid_snap_;
+  bool http_sta_later_{false};
+  uint8_t http_later_cmd_{0};  // 1 apply, 2 cancel
   bool switch_reverted_{false};
   std::atomic<uint8_t> sta_reason_{0};      // last router disconnect reason, from the event task
   bool http_ap_pw_pending_{false};

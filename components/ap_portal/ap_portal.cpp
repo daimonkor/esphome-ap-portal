@@ -643,9 +643,13 @@ static std::string connected_ssid() {
   return std::string(s, strnlen(s, sizeof(info.ssid)));
 }
 
-void ApPortal::switch_start_(const std::string &ssid, const std::string &psk, uint32_t now) {
+void ApPortal::switch_start_(const std::string &ssid, const std::string &psk, uint32_t now,
+                             const std::string *old_ssid, const std::string *old_psk) {
   auto *w = wifi::global_wifi_component;
-  if (!this->switch_pending_) {  // a second request keeps the first fallback
+  if (old_ssid != nullptr) {
+    this->switch_old_ssid_ = *old_ssid;
+    this->switch_old_psk_ = *old_psk;
+  } else if (!this->switch_pending_) {  // a second request keeps the first fallback
     const auto old = w->get_sta();
     this->switch_old_ssid_ = std::string(old.get_ssid().c_str(), old.get_ssid().size());
     this->switch_old_psk_ = std::string(old.get_password().c_str(), old.get_password().size());
@@ -700,6 +704,71 @@ void ApPortal::switch_tick_(uint32_t now) {
   }
   this->switch_reconnect_(this->switch_old_ssid_, this->switch_old_psk_);
   this->switch_old_psk_.clear();
+}
+
+// "Save, connect later": the network is saved (so a restart uses it) but the device stays where
+// it is while someone works on the access point. It switches once the last client has left for
+// LATER_IDLE_MS, or when asked; the fallback is the network it was on when the page saved.
+static constexpr uint32_t LATER_IDLE_MS = 10000;
+
+void ApPortal::later_save_(const std::string &ssid, const std::string &psk) {
+  auto *w = wifi::global_wifi_component;
+  if (!this->later_pending_) {
+    const auto old = w->get_sta();
+    this->later_old_ssid_ = std::string(old.get_ssid().c_str(), old.get_ssid().size());
+    this->later_old_psk_ = std::string(old.get_password().c_str(), old.get_password().size());
+  }
+  this->later_ssid_ = ssid;
+  this->later_psk_ = psk;
+  this->later_pending_ = true;
+  this->later_idle_since_ = 0;
+  {
+    std::lock_guard<std::mutex> g(this->mu_);
+    this->later_ssid_snap_ = ssid;
+  }
+  w->save_wifi_sta(ssid, psk);  // connected: saved only, no reconnect — exactly what is wanted here
+  ESP_LOGI(TAG, "Wi-Fi page: '%s' saved, the device stays on '%s' until the access point is free",
+           ssid.c_str(), this->later_old_ssid_.c_str());
+}
+
+void ApPortal::later_apply_(uint32_t now, const char *why) {
+  ESP_LOGI(TAG, "Wi-Fi page: applying the saved network '%s' (%s)", this->later_ssid_.c_str(), why);
+  this->later_pending_ = false;
+  {
+    std::lock_guard<std::mutex> g(this->mu_);
+    this->later_ssid_snap_.clear();
+    this->target_ssid_ = this->later_ssid_;
+    this->sta_reason_ = 0;
+  }
+  this->switch_start_(this->later_ssid_, this->later_psk_, now, &this->later_old_ssid_, &this->later_old_psk_);
+  this->later_psk_.clear();
+  this->later_old_psk_.clear();
+}
+
+void ApPortal::later_cancel_() {
+  ESP_LOGI(TAG, "Wi-Fi page: '%s' cancelled, staying on '%s'", this->later_ssid_.c_str(),
+           this->later_old_ssid_.c_str());
+  this->later_pending_ = false;
+  {
+    std::lock_guard<std::mutex> g(this->mu_);
+    this->later_ssid_snap_.clear();
+  }
+  wifi::global_wifi_component->save_wifi_sta(this->later_old_ssid_, this->later_old_psk_);
+  this->later_psk_.clear();
+  this->later_old_psk_.clear();
+}
+
+void ApPortal::later_tick_(uint32_t now) {
+  if (!this->later_pending_)
+    return;
+  if (this->client_count() > 0) {
+    this->later_idle_since_ = 0;
+    return;
+  }
+  if (this->later_idle_since_ == 0)
+    this->later_idle_since_ = now ? now : 1;
+  if (ap_portal_core::elapsed(now, this->later_idle_since_, LATER_IDLE_MS))
+    this->later_apply_(now, "nobody on the access point");
 }
 
 // ───────────────────────────── password reset on the spot ─────────────────────────────
@@ -946,13 +1015,22 @@ void ApPortal::handle_api_(AsyncWebServerRequest *request, const Classified &c) 
       request->send(400, "text/plain", "SSID 1..32, password empty or 8..64");
       return;
     }
+    const bool later = request->arg("when") == "later";
     std::lock_guard<std::mutex> g(this->mu_);
     this->http_sta_ssid_ = ssid;
     this->http_sta_psk_ = psk;
-    this->target_ssid_ = ssid;  // the page asks how this one goes
-    this->sta_reason_ = 0;
-    this->http_sta_at_ = millis() + PASSWORD_APPLY_DELAY_MS;  // the answer leaves first
+    this->http_sta_later_ = later;
+    if (!later) {
+      this->target_ssid_ = ssid;  // the page asks how this one goes
+      this->sta_reason_ = 0;
+    }
+    this->http_sta_at_ = millis() + (later ? 0 : PASSWORD_APPLY_DELAY_MS);  // the answer leaves first
     this->http_sta_pending_ = true;
+  } else if (p == a + "apply" || p == a + "cancel") {
+    std::lock_guard<std::mutex> g(this->mu_);
+    if (p == a + "apply")
+      this->target_ssid_ = this->later_ssid_snap_;
+    this->http_later_cmd_ = p == a + "apply" ? 1 : 2;
   } else if (this->wifi_ap_password_ && p == a + "ap_password") {
     const std::string pw = request->arg("password");
     if (!ap_portal_core::valid_ap_password(pw)) {
@@ -1021,6 +1099,15 @@ void ApPortal::send_networks_(AsyncWebServerRequest *request) {
       out += ",\"previous\":\"" + std::string(esc) + "\",\"reverted\":" + (reverted ? "true" : "false");
     }
   }
+  {
+    std::string later;
+    {
+      std::lock_guard<std::mutex> g(this->mu_);
+      later = this->later_ssid_snap_;
+    }
+    json_escape_into_buffer(esc, StringRef(later.c_str(), later.size()));
+    out += ",\"later\":\"" + std::string(esc) + "\"";
+  }
   out += ",\"networks\":[";
   {
     wifi::ScanResultsLock lock(w);
@@ -1045,7 +1132,8 @@ void ApPortal::send_networks_(AsyncWebServerRequest *request) {
 }
 
 void ApPortal::http_requests_tick_(uint32_t now) {
-  bool scan = false, sta = false, ap_pw = false, ap_reset = false;
+  bool scan = false, sta = false, sta_later = false, ap_pw = false, ap_reset = false;
+  uint8_t later_cmd = 0;
   std::string ssid, psk, pw;
   {
     std::lock_guard<std::mutex> g(this->mu_);
@@ -1058,7 +1146,10 @@ void ApPortal::http_requests_tick_(uint32_t now) {
       this->http_sta_pending_ = false;
       ssid.swap(this->http_sta_ssid_);
       psk.swap(this->http_sta_psk_);
+      sta_later = this->http_sta_later_;
     }
+    later_cmd = this->http_later_cmd_;
+    this->http_later_cmd_ = 0;
     if (this->http_ap_pw_pending_) {
       ap_pw = true;
       ap_reset = this->http_ap_pw_reset_;
@@ -1068,8 +1159,15 @@ void ApPortal::http_requests_tick_(uint32_t now) {
   }
   if (scan)
     this->scan();
-  if (sta)
+  if (sta && sta_later && wifi::global_wifi_component->is_connected())
+    this->later_save_(ssid, psk);
+  else if (sta)
     this->switch_start_(ssid, psk, now);
+  if (later_cmd == 1 && this->later_pending_)
+    this->later_apply_(now, "asked from the page");
+  else if (later_cmd == 2 && this->later_pending_)
+    this->later_cancel_();
+  this->later_tick_(now);
   this->switch_tick_(now);
   if (ap_pw) {
     if (ap_reset)
