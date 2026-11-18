@@ -153,6 +153,7 @@ class ApPortal : public Component, public AsyncWebHandler {
   void http_requests_tick_(uint32_t now);
   void switch_start_(const std::string &ssid, const std::string &psk, uint32_t now);
   void switch_tick_(uint32_t now);
+  void switch_reconnect_(const std::string &ssid, const std::string &psk);
   void forward_(AsyncWebServerRequest *request);
   ap_portal_core::Vars page_vars_(const Classified &c);
   void refresh_lambda_vars_(uint32_t now);

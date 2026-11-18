@@ -6,9 +6,11 @@ Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monito
 
 ### Fixed
 - Connecting to another router network from the Wi-Fi page did nothing while the device was
-  connected: ESPHome's `save_wifi_sta()` only saves then. Now Wi-Fi is switched off and on around
-  it, like `wifi.configure`; if the new network does not connect within 30 s the previous one comes
-  back (`previous`, `reverted` in `networks`; the toast says so).
+  connected: ESPHome's `save_wifi_sta()` only saves then. Now only the router connection is dropped
+  after it (`esp_wifi_disconnect`) — the access point stays up, unlike `wifi.configure`'s
+  disable/enable which sent phones off to another network. While switching, quiet mode stays but
+  the channel is not locked (the new router may be elsewhere). If the new network does not connect
+  within 30 s the previous one comes back (`previous`, `reverted` in `networks`; the toast says so).
 
 ### Added
 - Loading state while switching the router network: a spinner on the Connect button (disabled)

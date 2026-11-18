@@ -588,7 +588,9 @@ void ApPortal::quiet_tick_(uint32_t now, bool router) {
   // Lock to the router's last channel — the access point serves there too (one radio). Never to
   // the radio's current channel, never to a guess.
   const uint8_t ch = this->ap_channel_;
-  const bool quiet = this->quiet_ours_ && cp->is_active();
+  // While switching the router network the new one may be on another channel: quiet mode stays
+  // (no scans, no adapter restarts — the access point keeps running), the channel lock does not.
+  const bool quiet = this->quiet_ours_ && cp->is_active() && !this->switch_pending_;
   switch (this->lock_.update(ap_portal_core::lock_wanted(quiet, ch), ch, now)) {
     case ap_portal_core::ChannelLock::Action::LOCK:
       this->lock_apply_(this->lock_.channel());
@@ -626,9 +628,11 @@ void ApPortal::lock_release_() {
 }
 
 // ───────────────────────────── switching the router network ─────────────────────────────
-// Like ESPHome's wifi.configure: save_wifi_sta() alone does not reconnect while the device is
-// connected (2026-11-18: saved, nothing happened), so Wi-Fi is switched off and on around it. If the
-// new network does not take within SWITCH_TIMEOUT_MS, the previous one is put back.
+// save_wifi_sta() alone does not reconnect while the device is connected (2026-11-18: saved,
+// nothing happened), so the router connection is dropped after it. While switching, quiet mode
+// keeps the access point up but the channel is not locked: the new router may be on another
+// channel. If the new network
+// does not take within SWITCH_TIMEOUT_MS, the previous one is put back.
 static constexpr uint32_t SWITCH_TIMEOUT_MS = 30000;
 
 static std::string connected_ssid() {
@@ -656,9 +660,19 @@ void ApPortal::switch_start_(const std::string &ssid, const std::string &psk, ui
   this->switch_target_ = ssid;
   this->switch_pending_ = true;
   this->switch_deadline_ = now + SWITCH_TIMEOUT_MS;
-  w->disable();
-  w->save_wifi_sta(ssid, psk);  // saved by ESPHome, kept across reboots
-  w->enable();
+  this->switch_reconnect_(ssid, psk);
+}
+
+// Save the network and make ESPHome go to it. Only the router connection is dropped, never the
+// whole Wi-Fi: wifi.configure-style disable()/enable() also took the access point down and phones
+// went off to another network (2026-11-18). After esp_wifi_disconnect() ESPHome reconnects to the
+// station it now has, the new one.
+void ApPortal::switch_reconnect_(const std::string &ssid, const std::string &psk) {
+  auto *w = wifi::global_wifi_component;
+  const bool was_connected = w->is_connected();
+  w->save_wifi_sta(ssid, psk);  // saved by ESPHome, kept across reboots; reconnects only if not connected
+  if (was_connected)
+    esp_wifi_disconnect();
 }
 
 void ApPortal::switch_tick_(uint32_t now) {
@@ -684,9 +698,7 @@ void ApPortal::switch_tick_(uint32_t now) {
     std::lock_guard<std::mutex> g(this->mu_);
     this->switch_reverted_ = true;
   }
-  w->disable();
-  w->save_wifi_sta(this->switch_old_ssid_, this->switch_old_psk_);
-  w->enable();
+  this->switch_reconnect_(this->switch_old_ssid_, this->switch_old_psk_);
   this->switch_old_psk_.clear();
 }
 
