@@ -88,6 +88,11 @@ ap_portal:
   api:                          # /ap_portal/ endpoints + client.js for your own site
     enabled: true
     from_home: false            # also from the home network (behind web_server's login)
+  router_fallback:              # a network saved from the page that does not connect after a restart:
+    timeout: 45s                # wait this long, then each step below in turn
+    previous: true              # back to the network the device was on before
+    firmware: true              # then to the network from the YAML (wifi: ssid / networks)
+  on_router_fallback:           # to: "previous" / "firmware" / "none", ssid
   wifi_page:                    # built-in /wifi page, access point clients only (gate: after the button)
     enabled: true               # scan list, connect to a router network, the access point password
     path: /wifi                 # the landing page's second button leads here unless you set `secondary`

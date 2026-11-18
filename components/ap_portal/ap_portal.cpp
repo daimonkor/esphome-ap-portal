@@ -148,6 +148,8 @@ void ApPortal::setup() {
     }
   }
 
+  this->check_boot_();
+
   // Fixed for the web server task.
   this->ssid_snap_ = std::string(w->get_ap().get_ssid().c_str(), w->get_ap().get_ssid().size());
   this->host_ = App.get_name();
@@ -632,8 +634,7 @@ void ApPortal::lock_release_() {
 // nothing happened), so the router connection is dropped after it. While switching, quiet mode
 // keeps the access point up but the channel is not locked: the new router may be on another
 // channel. If the new network
-// does not take within SWITCH_TIMEOUT_MS, the previous one is put back.
-static constexpr uint32_t SWITCH_TIMEOUT_MS = 30000;
+// does not take within router_fallback.timeout, the previous one is put back.
 
 static std::string connected_ssid() {
   wifi_ap_record_t info{};
@@ -655,15 +656,16 @@ void ApPortal::switch_start_(const std::string &ssid, const std::string &psk, ui
     this->switch_old_psk_ = std::string(old.get_password().c_str(), old.get_password().size());
   }
   ESP_LOGI(TAG, "Wi-Fi page: switching to the router network '%s' (fallback '%s' in %u s)", ssid.c_str(),
-           this->switch_old_ssid_.c_str(), (unsigned) (SWITCH_TIMEOUT_MS / 1000));
+           this->switch_old_ssid_.c_str(), (unsigned) (this->fb_timeout_ / 1000));
   {
     std::lock_guard<std::mutex> g(this->mu_);
     this->switch_reverted_ = false;
     this->switch_previous_ = this->switch_old_ssid_;
   }
+  this->check_save_(ssid, this->switch_old_ssid_, this->switch_old_psk_);
   this->switch_target_ = ssid;
   this->switch_pending_ = true;
-  this->switch_deadline_ = now + SWITCH_TIMEOUT_MS;
+  this->switch_deadline_ = now + this->fb_timeout_;
   this->switch_reconnect_(ssid, psk);
 }
 
@@ -686,6 +688,7 @@ void ApPortal::switch_tick_(uint32_t now) {
   if (w->is_connected() && connected_ssid() == this->switch_target_) {
     ESP_LOGI(TAG, "Wi-Fi page: connected to '%s'", this->switch_target_.c_str());
     this->switch_pending_ = false;
+    this->check_erase_();  // the new network works, nothing to check after a restart
     return;
   }
   if (!ap_portal_core::reached(now, this->switch_deadline_))
@@ -696,13 +699,15 @@ void ApPortal::switch_tick_(uint32_t now) {
     return;
   }
   ESP_LOGW(TAG, "Wi-Fi page: '%s' did not connect in %u s (%s), back to '%s'", this->switch_target_.c_str(),
-           (unsigned) (SWITCH_TIMEOUT_MS / 1000), ap_portal_core::sta_error_kind(this->sta_reason_.load()),
+           (unsigned) (this->fb_timeout_ / 1000), ap_portal_core::sta_error_kind(this->sta_reason_.load()),
            this->switch_old_ssid_.c_str());
   {
     std::lock_guard<std::mutex> g(this->mu_);
     this->switch_reverted_ = true;
   }
   this->switch_reconnect_(this->switch_old_ssid_, this->switch_old_psk_);
+  this->check_erase_();  // back on the network that worked
+  this->on_router_fallback_.call("previous", this->switch_old_ssid_);
   this->switch_old_psk_.clear();
 }
 
@@ -726,6 +731,7 @@ void ApPortal::later_save_(const std::string &ssid, const std::string &psk) {
     std::lock_guard<std::mutex> g(this->mu_);
     this->later_ssid_snap_ = ssid;
   }
+  this->check_save_(ssid, this->later_old_ssid_, this->later_old_psk_);
   w->save_wifi_sta(ssid, psk);  // connected: saved only, no reconnect — exactly what is wanted here
   ESP_LOGI(TAG, "Wi-Fi page: '%s' saved, the device stays on '%s' until the access point is free",
            ssid.c_str(), this->later_old_ssid_.c_str());
@@ -754,6 +760,7 @@ void ApPortal::later_cancel_() {
     this->later_ssid_snap_.clear();
   }
   wifi::global_wifi_component->save_wifi_sta(this->later_old_ssid_, this->later_old_psk_);
+  this->check_erase_();
   this->later_psk_.clear();
   this->later_old_psk_.clear();
 }
@@ -769,6 +776,98 @@ void ApPortal::later_tick_(uint32_t now) {
     this->later_idle_since_ = now ? now : 1;
   if (ap_portal_core::elapsed(now, this->later_idle_since_, LATER_IDLE_MS))
     this->later_apply_(now, "nobody on the access point");
+}
+
+// ───────────────────────────── router fallback after a restart ─────────────────────────────
+// A network saved from the page is remembered together with the one the device was on. After a
+// restart, if the device gets no router within `timeout`, it goes back step by step: the previous
+// network, then the one from the YAML (each step `timeout` long), then gives up ("none": it keeps
+// its own access point and quiet mode). Any router connection ends the check.
+static constexpr uint32_t CHECK_MAGIC = 0xA9F0C0E1;
+struct RouterCheck {
+  uint32_t magic;
+  char new_ssid[33];
+  char old_ssid[33];
+  char old_psk[65];
+};
+
+void ApPortal::check_save_(const std::string &new_ssid, const std::string &old_ssid, const std::string &old_psk) {
+  if (!this->fb_enabled_)
+    return;
+  RouterCheck rec{};
+  rec.magic = CHECK_MAGIC;
+  std::strncpy(rec.new_ssid, new_ssid.c_str(), sizeof(rec.new_ssid) - 1);
+  std::strncpy(rec.old_ssid, old_ssid.c_str(), sizeof(rec.old_ssid) - 1);
+  std::strncpy(rec.old_psk, old_psk.c_str(), sizeof(rec.old_psk) - 1);
+  this->check_pref_.save(&rec);
+  global_preferences->sync();
+  this->check_saved_ = true;
+}
+
+void ApPortal::check_erase_() {
+  if (!this->fb_enabled_ || !this->check_saved_)
+    return;
+  RouterCheck rec{};
+  this->check_pref_.save(&rec);
+  global_preferences->sync();
+  this->check_saved_ = false;
+}
+
+void ApPortal::check_boot_() {
+  if (!this->fb_enabled_)
+    return;
+  this->check_pref_ = global_preferences->make_preference<RouterCheck>(fnv1_hash("ap_portal_router_check"));
+  RouterCheck rec{};
+  this->check_saved_ = true;  // erase whatever is there once settled
+  if (!this->check_pref_.load(&rec) || rec.magic != CHECK_MAGIC)
+    return;
+  rec.new_ssid[32] = rec.old_ssid[32] = rec.old_psk[64] = 0;
+  this->fb_new_ = rec.new_ssid;
+  this->fb_old_ssid_ = rec.old_ssid;
+  this->fb_old_psk_ = rec.old_psk;
+  this->fb_stage_ = 1;
+  this->fb_deadline_ = millis() + this->fb_timeout_;
+  ESP_LOGI(TAG, "Router check: '%s' was saved from the page; %u s to connect, then fallback", this->fb_new_.c_str(),
+           (unsigned) (this->fb_timeout_ / 1000));
+}
+
+void ApPortal::fallback_tick_(uint32_t now) {
+  if (this->fb_stage_ == 0)
+    return;
+  auto *w = wifi::global_wifi_component;
+  if (w->is_connected()) {
+    ESP_LOGI(TAG, "Router check: connected to '%s'", connected_ssid().c_str());
+    this->fb_stage_ = 0;
+    this->check_erase_();
+    this->fb_old_psk_.clear();
+    return;
+  }
+  if (this->switch_pending_ || !ap_portal_core::reached(now, this->fb_deadline_))
+    return;  // a switch from the page has its own fallback
+  const std::string tried = this->fb_stage_ == 1 ? this->fb_new_ : this->fb_stage_ == 2 ? this->fb_old_ssid_ : this->fw_ssid_;
+  ESP_LOGW(TAG, "Router check: no router on '%s' in %u s (%s)", tried.c_str(), (unsigned) (this->fb_timeout_ / 1000),
+           ap_portal_core::sta_error_kind(this->sta_reason_.load()));
+  if (this->fb_stage_ == 1 && this->fb_previous_ && !this->fb_old_ssid_.empty() && this->fb_old_ssid_ != this->fb_new_) {
+    this->fb_stage_ = 2;
+    this->fb_deadline_ = now + this->fb_timeout_;
+    ESP_LOGW(TAG, "Router check: back to the previous network '%s'", this->fb_old_ssid_.c_str());
+    this->switch_reconnect_(this->fb_old_ssid_, this->fb_old_psk_);
+    this->on_router_fallback_.call("previous", this->fb_old_ssid_);
+    return;
+  }
+  if (this->fb_stage_ <= 2 && this->fb_firmware_ && !this->fw_ssid_.empty() && this->fw_ssid_ != tried) {
+    this->fb_stage_ = 3;
+    this->fb_deadline_ = now + this->fb_timeout_;
+    ESP_LOGW(TAG, "Router check: back to the firmware network '%s'", this->fw_ssid_.c_str());
+    this->switch_reconnect_(this->fw_ssid_, this->fw_psk_);
+    this->on_router_fallback_.call("firmware", this->fw_ssid_);
+    return;
+  }
+  ESP_LOGW(TAG, "Router check: no router reachable; the access point stays");
+  this->fb_stage_ = 0;
+  this->check_erase_();
+  this->fb_old_psk_.clear();
+  this->on_router_fallback_.call("none", "");
 }
 
 // ───────────────────────────── password reset on the spot ─────────────────────────────
@@ -1169,6 +1268,7 @@ void ApPortal::http_requests_tick_(uint32_t now) {
     this->later_cancel_();
   this->later_tick_(now);
   this->switch_tick_(now);
+  this->fallback_tick_(now);
   if (ap_pw) {
     if (ap_reset)
       this->reset_password();

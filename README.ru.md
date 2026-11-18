@@ -84,6 +84,11 @@ ap_portal:
   api:                          # адреса /ap_portal/ и client.js для своего сайта
     enabled: true
     from_home: false            # и из домашней сети (под логином web_server)
+  router_fallback:              # сеть со страницы не подключается после перезагрузки:
+    timeout: 45s                # ждать столько, затем по очереди шаги ниже
+    previous: true              # вернуться к сети, на которой устройство было до этого
+    firmware: true              # затем к сети из YAML (wifi: ssid / networks)
+  on_router_fallback:           # to: "previous" / "firmware" / "none", ssid
   wifi_page:                    # встроенная страница /wifi, только для клиентов точки (gate: после кнопки)
     enabled: true               # список сетей, подключение к роутеру, пароль точки доступа
     path: /wifi                 # сюда ведёт вторая кнопка стартовой страницы, если не задан `secondary`

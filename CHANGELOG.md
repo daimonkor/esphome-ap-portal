@@ -13,6 +13,10 @@ Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monito
   within 30 s the previous one comes back (`previous`, `reverted` in `networks`; the toast says so).
 
 ### Added
+- `router_fallback:` — a network saved from the page that gives no router within `timeout` (45 s)
+  after a restart: back to the previous network, then to the YAML one (each optional, each step
+  `timeout` long), else "none" (the access point stays). Hook `on_router_fallback` (to, ssid). The
+  in-session switch from the page uses the same timeout and fires the hook when it goes back.
 - "Save, connect later" next to "Connect now": the network is saved (a restart uses it) but the
   device stays on its current network while someone is on the access point; it switches 10 s after
   the last client leaves, or on Connect now / `apPortal.apply()`; Cancel (`apPortal.cancel()`)

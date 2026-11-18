@@ -62,6 +62,11 @@ CONF_ON_LANDING = "on_landing"
 CONF_ON_ENTER = "on_enter"
 CONF_WIFI_PAGE = "wifi_page"
 CONF_API = "api"
+CONF_ROUTER_FALLBACK = "router_fallback"
+CONF_TIMEOUT = "timeout"
+CONF_PREVIOUS = "previous"
+CONF_FIRMWARE = "firmware"
+CONF_ON_ROUTER_FALLBACK = "on_router_fallback"
 CONF_FROM_HOME = "from_home"
 CONF_AP_PASSWORD = "ap_password"
 CONF_PASSWORD_RESET = "password_reset"
@@ -108,6 +113,9 @@ EnterTrigger = ap_portal_ns.class_(
     "EnterTrigger", automation.Trigger.template(cg.std_string, cg.std_string)
 )
 PowerCycleTrigger = ap_portal_ns.class_("PowerCycleTrigger", automation.Trigger.template(cg.int_))
+RouterFallbackTrigger = ap_portal_ns.class_(
+    "RouterFallbackTrigger", automation.Trigger.template(cg.std_string, cg.std_string)
+)
 PasswordResetTrigger = ap_portal_ns.class_(
     "PasswordResetTrigger", automation.Trigger.template(cg.std_string)
 )
@@ -263,6 +271,21 @@ CONFIG_SCHEMA = cv.All(
                 }
             ),
             cv.Optional(CONF_PASSWORD_RESET, default={}): PASSWORD_RESET_SCHEMA,
+            # a network saved from the page that does not connect after a restart: back to the
+            # previous one, then to the one from the YAML, each step `timeout` long
+            cv.Optional(CONF_ROUTER_FALLBACK, default={}): cv.Schema(
+                {
+                    cv.Optional(CONF_TIMEOUT, default="45s"): cv.All(
+                        cv.positive_time_period_milliseconds,
+                        cv.Range(min=cv.TimePeriod(seconds=15), max=cv.TimePeriod(minutes=10)),
+                    ),
+                    cv.Optional(CONF_PREVIOUS, default=True): cv.boolean,
+                    cv.Optional(CONF_FIRMWARE, default=True): cv.boolean,
+                }
+            ),
+            cv.Optional(CONF_ON_ROUTER_FALLBACK): automation.validate_automation(
+                {cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(RouterFallbackTrigger)}
+            ),
             cv.Optional(CONF_ON_POWER_CYCLE): automation.validate_automation(
                 {cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(PowerCycleTrigger)}
             ),
@@ -424,6 +447,15 @@ async def to_code(config):
         cg.add(var.add_static_var("icon_svg", _read(landing[CONF_ICON_SVG])))
     cg.add(var.add_static_var("primary_label", landing.get(CONF_PRIMARY_LABEL, "Open device page")))
     cg.add(var.add_static_var("primary_default", "" if CONF_PRIMARY_LABEL in landing else "1"))
+    fb = config[CONF_ROUTER_FALLBACK]
+    cg.add(var.set_router_fallback(fb[CONF_TIMEOUT].total_milliseconds, fb[CONF_PREVIOUS], fb[CONF_FIRMWARE]))
+    nets = CORE.config.get("wifi", {}).get("networks", [])
+    if nets and fb[CONF_FIRMWARE]:
+        # ESPHome does not hand out its YAML network before Wi-Fi starts; it is in the firmware anyway
+        cg.add(var.set_firmware_sta(nets[0].get(CONF_SSID, ""), nets[0].get(CONF_PASSWORD, "")))
+    for conf in config.get(CONF_ON_ROUTER_FALLBACK, []):
+        trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var)
+        await automation.build_automation(trigger, [(cg.std_string, "to"), (cg.std_string, "ssid")], conf)
     api = config[CONF_API]
     cg.add(var.set_api(api[CONF_ENABLED], api[CONF_FROM_HOME]))
     wifi_page = config[CONF_WIFI_PAGE]

@@ -56,6 +56,16 @@ class ApPortal : public Component, public AsyncWebHandler {
     this->api_from_home_ = enabled && from_home;
   }
   void set_power_cycles(uint8_t n) { this->power_cycles_ = n; }
+  void set_router_fallback(uint32_t timeout_ms, bool previous, bool firmware) {
+    this->fb_timeout_ = timeout_ms;
+    this->fb_previous_ = previous;
+    this->fb_firmware_ = firmware;
+    this->fb_enabled_ = previous || firmware;
+  }
+  void set_firmware_sta(const std::string &ssid, const std::string &psk) {
+    this->fw_ssid_ = ssid;
+    this->fw_psk_ = psk;
+  }
   void set_reset_hold(uint32_t ms) { this->reset_hold_.set_hold(ms); }
   void set_reset_pin(GPIOPin *pin) { this->reset_pin_ = pin; }
   void set_boot_pin(int8_t gpio) { this->boot_pin_ = gpio; }
@@ -106,6 +116,9 @@ class ApPortal : public Component, public AsyncWebHandler {
   void add_on_enter(std::function<void(std::string, std::string)> &&cb) { this->on_enter_.add(std::move(cb)); }
   void add_on_power_cycle(std::function<void(int)> &&cb) { this->on_power_cycle_.add(std::move(cb)); }
   void add_on_password_reset(std::function<void(std::string)> &&cb) { this->on_password_reset_.add(std::move(cb)); }
+  void add_on_router_fallback(std::function<void(std::string, std::string)> &&cb) {
+    this->on_router_fallback_.add(std::move(cb));
+  }
 
  protected:
   bool want_active_() const { return this->active_lambda_ ? this->active_lambda_() : this->active_; }
@@ -157,6 +170,10 @@ class ApPortal : public Component, public AsyncWebHandler {
   void later_apply_(uint32_t now, const char *why);
   void later_cancel_();
   void later_tick_(uint32_t now);
+  void check_save_(const std::string &new_ssid, const std::string &old_ssid, const std::string &old_psk);
+  void check_erase_();
+  void check_boot_();
+  void fallback_tick_(uint32_t now);
   void switch_tick_(uint32_t now);
   void switch_reconnect_(const std::string &ssid, const std::string &psk);
   void forward_(AsyncWebServerRequest *request);
@@ -253,6 +270,14 @@ class ApPortal : public Component, public AsyncWebHandler {
   uint32_t later_idle_since_{0};
   std::string later_ssid_, later_psk_, later_old_ssid_, later_old_psk_, later_ssid_snap_;
   bool http_sta_later_{false};
+  // router fallback (loop() only)
+  bool fb_enabled_{true}, fb_previous_{true}, fb_firmware_{true};
+  uint32_t fb_timeout_{45000};
+  uint8_t fb_stage_{0};  // 0 idle, 1 the saved network, 2 the previous one, 3 the firmware one
+  uint32_t fb_deadline_{0};
+  std::string fb_new_, fb_old_ssid_, fb_old_psk_, fw_ssid_, fw_psk_;
+  ESPPreferenceObject check_pref_;
+  bool check_saved_{false};
   uint8_t http_later_cmd_{0};  // 1 apply, 2 cancel
   bool switch_reverted_{false};
   std::atomic<uint8_t> sta_reason_{0};      // last router disconnect reason, from the event task
@@ -280,6 +305,7 @@ class ApPortal : public Component, public AsyncWebHandler {
   CallbackManager<void(std::string, std::string)> on_enter_;
   CallbackManager<void(int)> on_power_cycle_;
   CallbackManager<void(std::string)> on_password_reset_;
+  CallbackManager<void(std::string, std::string)> on_router_fallback_;
 };
 
 // ── triggers ──
@@ -331,6 +357,12 @@ class PowerCycleTrigger : public Trigger<int> {
  public:
   explicit PowerCycleTrigger(ApPortal *parent) {
     parent->add_on_power_cycle([this](int count) { this->trigger(count); });
+  }
+};
+class RouterFallbackTrigger : public Trigger<std::string, std::string> {
+ public:
+  explicit RouterFallbackTrigger(ApPortal *parent) {
+    parent->add_on_router_fallback([this](std::string to, std::string ssid) { this->trigger(to, ssid); });
   }
 };
 class PasswordResetTrigger : public Trigger<std::string> {

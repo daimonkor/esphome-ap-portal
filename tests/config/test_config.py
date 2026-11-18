@@ -111,6 +111,12 @@ GOOD = {
     "reset_off": "ap_portal:\n  password_persist: true\n  password_reset: {power_cycles: 0, pin: false}\n",
     "api_from_home": "ap_portal:\n  api: {from_home: true}\n  wifi_page: {enabled: false}\n",
     "wifi_page_custom": "ap_portal:\n  wifi_page: {path: /setup, ap_password: false}\n",
+    "router_fallback": textwrap.dedent("""\
+        ap_portal:
+          router_fallback: {timeout: 60s, previous: true, firmware: false}
+          on_router_fallback:
+            - logger.log: {format: "fallback to %s (%s)", args: [to.c_str(), ssid.c_str()]}
+        """),
     "suffix_fits": "ap_portal:\n  ssid_suffix_mac: true\n",
     "actions": textwrap.dedent("""\
         ap_portal:
@@ -182,6 +188,7 @@ BAD = {
     ),
     "wifi_page_without_api": (head(), "ap_portal:\n  api: {enabled: false}\n", "needs api"),
     "wifi_page_clash": (head(), "ap_portal:\n  wifi_page: {path: /welcome}\n", "clashes"),
+    "fallback_too_short": (head(), "ap_portal:\n  router_fallback: {timeout: 5s}\n", "timeout"),
     "removed_option": (head(), "ap_portal:\n  keep_ap: native\n", "keep_ap"),
 }
 
