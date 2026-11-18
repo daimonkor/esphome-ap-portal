@@ -524,8 +524,9 @@ void ApPortal::configure_dhcp_() {
   this->dhcp_done_ = true;
   const auto ap = wifi::global_wifi_component->get_ap();
   esp_netif_ip_info_t info{};
-  if (ap.get_manual_ip().has_value()) {
-    const auto &mi = ap.get_manual_ip().value();
+  const auto manual = ap.get_manual_ip();  // a copy: newer ESPHome returns it by value
+  if (manual.has_value()) {
+    const auto mi = *manual;
     info.ip = (esp_ip4_addr_t) mi.static_ip;
     info.gw = (esp_ip4_addr_t) mi.gateway;
     info.netmask = (esp_ip4_addr_t) mi.subnet;
