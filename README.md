@@ -1,8 +1,10 @@
 # ap_portal for ESPHome
 
-> **Status: 0.x, under construction.** The configuration, build checks and the decision logic
-> are in place and tested; the access point management itself lands in the next stages.
-> Do not use it on a device you depend on yet.
+**English** · [Українська](README.uk.md) · [Русский](README.ru.md)
+
+> **Status: 0.x.** The access point, quiet mode, landing page, scan and password work and are
+> tested on an ESP32-S3; moving the first real devices onto the library is next. Until a tagged
+> release, pin a commit if you depend on it.
 
 Your ESP32 keeps **its own Wi-Fi access point next to the router connection**. A phone that joins
 it gets the **"Sign in to network"** window and lands on your device page — with or without a
@@ -15,7 +17,7 @@ What it does that ESPHome's `captive_portal` does not:
 - requests from the home network are never touched — only clients of the access point see the landing;
 - **quiet mode**: with no router, ESPHome normally scans every channel and restarts the adapter,
   and phones on the access point lose packets or drop (measured: 45 % loss). `ap_portal` keeps the
-  radio on the access point's channel instead (measured: 0.3 % loss) and still finds the router when
+  radio on the access point's channel instead (measured: under 2 % loss, with the router coming back) and still finds the router when
   it comes back, even on another channel;
 - the SSID can carry the MAC suffix, the password can be changed from the device and survives reboots.
 
@@ -41,7 +43,7 @@ web_server:
   local: true                   # the page works without internet
 
 external_components:
-  - source: github://daimonkor/esphome-ap-portal@v0.1.0
+  - source: github://daimonkor/esphome-ap-portal@main   # a tag once v0.1.0 is out
     components: [ap_portal]
 
 ap_portal:
