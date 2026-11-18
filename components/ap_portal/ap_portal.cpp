@@ -2,6 +2,7 @@
 #include "landing_page.h"
 
 #include <cerrno>
+#include <cinttypes>
 #include <cstring>
 
 #include <esp_http_server.h>
@@ -247,6 +248,23 @@ void ApPortal::loop() {
     wifi_ap_record_t info{};
     if (esp_wifi_sta_get_ap_info(&info) == ESP_OK && info.primary != 0)
       this->ap_channel_ = info.primary;
+  }
+  if (this->has_ap_hidden_) {
+    const uint32_t clients = this->client_count();
+    if (this->reboot_timer_.update(router, clients, now)) {
+      ESP_LOGW(TAG, "No router for %" PRIu32 " s and nobody on the access point: rebooting",
+               this->reboot_timer_.timeout() / 1000);
+      App.safe_reboot();
+    }
+    const bool counting = this->reboot_timer_.running();
+    if (counting != this->reboot_logged_) {
+      this->reboot_logged_ = counting;
+      if (counting)
+        ESP_LOGI(TAG, "No router: reboot in %" PRIu32 " s unless it returns or someone joins the access point",
+                 this->reboot_timer_.timeout() / 1000);
+      else
+        ESP_LOGD(TAG, "Reboot timer stopped (%s)", router ? "router back" : "client on the access point");
+    }
   }
   if (this->ap_fallback_) {
     const bool want = this->fallback_ap_.update(router, this->client_count(), now);

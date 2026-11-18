@@ -623,6 +623,30 @@ inline const char *sta_error_kind(uint8_t reason) {
 // ───────────────────────────── access point only without a router (ap_mode: fallback) ─────────────────────────────
 // Up once there has been no router for `after`. Router back: down only after nobody has been on the
 // access point for `idle` — a phone in the middle of something is never thrown off.
+// keep_ap_on_connect hides ESPHome's access point flag, which also switches off ESPHome's own
+// "reboot when no router for reboot_timeout" (it only runs without an access point). This brings
+// it back: reboot after `timeout_ms` without a router, but never while someone is on the access
+// point — the timer starts over when the last client leaves. 0 = never.
+class RebootTimer {
+ public:
+  explicit RebootTimer(uint32_t timeout_ms = 0) : timeout_(timeout_ms) {}
+  void set(uint32_t timeout_ms) { this->timeout_ = timeout_ms; }
+  uint32_t timeout() const { return this->timeout_; }
+  bool update(bool router, uint32_t clients, uint32_t now) {
+    if (this->timeout_ == 0 || router || clients > 0) {
+      this->since_ = 0;
+      return false;
+    }
+    if (this->since_ == 0)
+      this->since_ = now ? now : 1;
+    return elapsed(now, this->since_, this->timeout_);
+  }
+  bool running() const { return this->since_ != 0; }
+ protected:
+  uint32_t timeout_;
+  uint32_t since_{0};
+};
+
 class FallbackAp {
  public:
   FallbackAp(uint32_t after_ms = 30000, uint32_t idle_ms = 60000) : after_(after_ms), idle_(idle_ms) {}

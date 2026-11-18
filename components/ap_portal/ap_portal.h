@@ -57,6 +57,7 @@ class ApPortal : public Component, public AsyncWebHandler {
   }
   void set_power_cycles(uint8_t n) { this->power_cycles_ = n; }
   void set_keep_ap_on_connect(bool v) { this->keep_ap_on_connect_ = v; }
+  void set_reboot_timeout(uint32_t ms) { this->reboot_timer_.set(ms); }
   void set_ap_fallback(uint32_t after_ms, uint32_t idle_ms) {
     this->ap_fallback_ = true;
     this->keep_ap_on_connect_ = true;  // the library decides when the access point goes
@@ -283,6 +284,8 @@ class ApPortal : public Component, public AsyncWebHandler {
   bool ap_fallback_{false};
   bool fallback_was_{true};
   ap_portal_core::FallbackAp fallback_ap_;
+  ap_portal_core::RebootTimer reboot_timer_;
+  bool reboot_logged_{false};
   // router fallback (loop() only)
   bool fb_enabled_{true}, fb_previous_{true}, fb_firmware_{true};
   uint32_t fb_timeout_{45000};

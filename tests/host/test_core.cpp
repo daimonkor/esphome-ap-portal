@@ -398,6 +398,34 @@ static void test_sta_errors() {
   CHECK(std::string(sta_error_kind(205)) == "failed");
 }
 
+static void test_reboot_timer() {
+  using ap_portal_core::RebootTimer;
+  RebootTimer off(0);
+  CHECK(!off.update(false, 0, 1000));
+  CHECK(!off.update(false, 0, 10000000));
+  RebootTimer t(120000);
+  CHECK(!t.update(true, 0, 1000));        // router: nothing
+  CHECK(!t.update(false, 0, 2000));       // no router: timer starts
+  CHECK(!t.update(false, 0, 121000));     // 119 s
+  CHECK(t.update(false, 0, 122001));      // > 120 s: reboot
+  RebootTimer c(120000);
+  CHECK(!c.update(false, 0, 1000));
+  CHECK(!c.update(false, 1, 100000));     // client joined: timer reset
+  CHECK(!c.update(false, 1, 500000));     // still a client: never
+  CHECK(!c.update(false, 0, 500001));     // client left: starts over
+  CHECK(!c.update(false, 0, 620000));
+  CHECK(c.update(false, 0, 620002));
+  RebootTimer r(120000);
+  CHECK(!r.update(false, 0, 1000));
+  CHECK(!r.update(true, 0, 100000));      // router back: reset
+  CHECK(!r.update(false, 0, 110000));
+  CHECK(!r.update(false, 0, 229000));
+  CHECK(r.update(false, 0, 230001));
+  RebootTimer w(120000);                  // millis() wrap
+  CHECK(!w.update(false, 0, 0xFFFFF000u));
+  CHECK(w.update(false, 0, 120000));
+}
+
 static void test_fallback_ap() {
   FallbackAp f(30000, 60000);
   CHECK(!f.update(true, 0, 1000));      // router: no access point
@@ -433,6 +461,7 @@ int main() {
   test_wrap();
   test_sta_errors();
   test_fallback_ap();
+  test_reboot_timer();
   std::printf("%d checks, %d failed\n", g_checks, g_fail);
   return g_fail ? EXIT_FAILURE : EXIT_SUCCESS;
 }

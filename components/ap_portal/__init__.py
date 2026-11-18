@@ -63,6 +63,7 @@ CONF_ON_ENTER = "on_enter"
 CONF_WIFI_PAGE = "wifi_page"
 CONF_API = "api"
 CONF_KEEP_AP_ON_CONNECT = "keep_ap_on_connect"
+CONF_REBOOT_TIMEOUT = "reboot_timeout"
 CONF_AP_MODE = "ap_mode"
 CONF_FALLBACK = "fallback"
 CONF_AFTER = "after"
@@ -275,6 +276,9 @@ CONFIG_SCHEMA = cv.All(
             # EXPERIMENTAL: ESPHome switches the access point off on every router connection;
             # with this it does not (ap_portal manages it). Turns ESPHome's reboot_timeout off.
             cv.Optional(CONF_KEEP_AP_ON_CONNECT, default=False): cv.boolean,
+            # with keep_ap_on_connect: reboot after this long without a router and with nobody on
+            # the access point. Default: wifi: reboot_timeout (15 min). 0s = never.
+            cv.Optional(CONF_REBOOT_TIMEOUT): cv.positive_time_period_milliseconds,
             # always: the access point runs whenever `active`; fallback: only without a router
             cv.Optional(CONF_AP_MODE, default="always"): cv.one_of("always", "fallback", lower=True),
             cv.Optional(CONF_FALLBACK, default={}): cv.Schema(
@@ -492,6 +496,12 @@ async def to_code(config):
     cg.add(var.add_static_var("primary_label", landing.get(CONF_PRIMARY_LABEL, "Open device page")))
     cg.add(var.add_static_var("primary_default", "" if CONF_PRIMARY_LABEL in landing else "1"))
     cg.add(var.set_keep_ap_on_connect(config[CONF_KEEP_AP_ON_CONNECT]))
+    if CONF_REBOOT_TIMEOUT in config:
+        reboot_ms = config[CONF_REBOOT_TIMEOUT].total_milliseconds
+    else:
+        wifi_rt = CORE.config.get("wifi", {}).get("reboot_timeout")
+        reboot_ms = wifi_rt.total_milliseconds if wifi_rt is not None else 15 * 60 * 1000
+    cg.add(var.set_reboot_timeout(reboot_ms))
     if config[CONF_AP_MODE] == "fallback":
         apf = config[CONF_FALLBACK]
         cg.add(var.set_ap_fallback(apf[CONF_AFTER].total_milliseconds, apf[CONF_OFF_WHEN_IDLE].total_milliseconds))
