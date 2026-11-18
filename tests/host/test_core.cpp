@@ -330,6 +330,39 @@ static void test_password_reset() {
   CHECK(h.update(true, 25000));
 }
 
+// ------------------------------------------------------------------ wifi page routes
+static void test_wifi_routes() {
+  RouteConfig c;
+  c.wifi_path = "/wifi";
+  Request r;
+  r.from_ap = true;
+  r.path = "/wifi";
+  CHECK(route(r, c) == Route::WIFI);
+  r.path = "/ap_portal/networks";
+  CHECK(route(r, c) == Route::API);
+  r.get = false;  // POST /ap_portal/connect
+  r.path = "/ap_portal/connect";
+  CHECK(route(r, c) == Route::API);
+  r.from_ap = false;  // home network: never
+  CHECK(route(r, c) == Route::PASS);
+  r.get = true;
+  r.path = "/wifi";
+  CHECK(route(r, c) == Route::PASS);
+  r.from_ap = true;
+  c.mode = Mode::GATE;  // gate: only with a pass
+  CHECK(route(r, c) == Route::LANDING);
+  r.get = false;
+  r.path = "/ap_portal/connect";
+  CHECK(route(r, c) == Route::PASS);
+  r.has_pass = true;
+  CHECK(route(r, c) == Route::API);
+  c.wifi_path.clear();  // page off: /ap_portal/ is just another path
+  c.mode = Mode::REDIRECT;
+  r.get = true;
+  r.path = "/ap_portal/networks";
+  CHECK(route(r, c) == Route::PASS);
+}
+
 int main() {
   test_timers();
   test_hosts();
@@ -342,6 +375,7 @@ int main() {
   test_templates();
   test_claim_clients();
   test_password_reset();
+  test_wifi_routes();
   std::printf("%d checks, %d failed\n", g_checks, g_fail);
   return g_fail ? EXIT_FAILURE : EXIT_SUCCESS;
 }

@@ -13,6 +13,7 @@
 #include "dhcpserver/dhcpserver.h"
 
 #include "esphome/components/captive_portal/captive_portal.h"
+#include "esphome/components/wifi/scan_list.h"
 #include "esphome/components/wifi/wifi_component.h"
 #include "esphome/core/application.h"
 #include "esphome/core/hal.h"
@@ -185,6 +186,7 @@ void ApPortal::loop() {
     }
   }
   this->reset_tick_(now);
+  this->http_requests_tick_(now);
   if (this->scan_retry_at_ != 0 && ap_portal_core::reached(now, this->scan_retry_at_)) {
     this->scan_retry_at_ = 0;
     this->scan_start_();
@@ -781,9 +783,153 @@ void ApPortal::handleRequest(AsyncWebServerRequest *request) {
       this->send_redirect_(request, "/");
       return;
     }
+    case ap_portal_core::Route::WIFI:
+      this->send_wifi_page_(request, c);
+      return;
+    case ap_portal_core::Route::API:
+      this->handle_api_(request, c);
+      return;
     case ap_portal_core::Route::PASS:
       this->forward_(request);
       return;
+  }
+}
+
+// ───────────────────────────── the Wi-Fi page ─────────────────────────────
+
+void ApPortal::send_wifi_page_(AsyncWebServerRequest *request, const Classified &c) {
+  std::string body = ap_portal_core::render(BUILTIN_WIFI, this->page_vars_(c));
+  auto *r = request->beginResponse(200, "text/html", body);
+  r->addHeader("Cache-Control", "no-store");
+  request->send(r);
+}
+
+// The web server task only records what was asked; loop() carries it out (http_requests_tick_).
+void ApPortal::handle_api_(AsyncWebServerRequest *request, const Classified &c) {
+  const std::string &p = c.path;
+  const std::string a = std::string(ap_portal_core::API_PREFIX);
+  const bool post = request->method() == HTTP_POST;
+  if (p == a + "networks") {
+    this->send_networks_(request);
+    return;
+  }
+  if (!post) {
+    request->send(405, "text/plain", "Use POST");
+    return;
+  }
+  if (p == a + "scan") {
+    std::lock_guard<std::mutex> g(this->mu_);
+    this->http_scan_ = true;
+  } else if (p == a + "connect") {
+    const std::string ssid = request->arg("ssid");
+    const std::string psk = request->arg("psk");
+    if (ssid.empty() || ssid.size() > 32 || psk.size() > 64 || (!psk.empty() && psk.size() < 8)) {
+      request->send(400, "text/plain", "SSID 1..32, password empty or 8..64");
+      return;
+    }
+    std::lock_guard<std::mutex> g(this->mu_);
+    this->http_sta_ssid_ = ssid;
+    this->http_sta_psk_ = psk;
+    this->http_sta_at_ = millis() + PASSWORD_APPLY_DELAY_MS;  // the answer leaves first
+    this->http_sta_pending_ = true;
+  } else if (this->wifi_ap_password_ && p == a + "ap_password") {
+    const std::string pw = request->arg("password");
+    if (!ap_portal_core::valid_ap_password(pw)) {
+      request->send(400, "text/plain", "Empty or 8..63 printable characters");
+      return;
+    }
+    std::lock_guard<std::mutex> g(this->mu_);
+    this->http_ap_pw_ = pw;
+    this->http_ap_pw_reset_ = false;
+    this->http_ap_pw_pending_ = true;
+  } else if (this->wifi_ap_password_ && p == a + "ap_password_reset") {
+    std::lock_guard<std::mutex> g(this->mu_);
+    this->http_ap_pw_reset_ = true;
+    this->http_ap_pw_pending_ = true;
+  } else {
+    request->send(404, "text/plain", "Not found");
+    return;
+  }
+  request->send(200, "text/plain", "OK");
+}
+
+// Scan results and the router connection as JSON. Hidden and duplicate networks are skipped the
+// way ESPHome's own form does; SSIDs are JSON-escaped.
+void ApPortal::send_networks_(AsyncWebServerRequest *request) {
+  auto *w = wifi::global_wifi_component;
+  std::string out = "{\"scanning\":";
+  out += this->scanning_ ? "true" : "false";
+  wifi_ap_record_t info{};
+  const bool connected = w->is_connected() && esp_wifi_sta_get_ap_info(&info) == ESP_OK;
+  char esc[32 * JSON_ESCAPE_MAX_EXPANSION + 1];
+  out += ",\"connected\":";
+  out += connected ? "true" : "false";
+  if (connected) {
+    const char *ssid = reinterpret_cast<const char *>(info.ssid);
+    json_escape_into_buffer(esc, StringRef(ssid, strnlen(ssid, sizeof(info.ssid))));
+    std::string ip;
+    esp_netif_t *sn = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    esp_netif_ip_info_t si{};
+    if (sn != nullptr && esp_netif_get_ip_info(sn, &si) == ESP_OK)
+      ip = ip_str(si.ip.addr);
+    out += ",\"ssid\":\"" + std::string(esc) + "\",\"ip\":\"" + ip + "\",\"rssi\":" + to_string(info.rssi);
+  }
+  out += ",\"networks\":[";
+  {
+    wifi::ScanResultsLock lock(w);
+    const auto &results = w->get_scan_result();
+    bool first = true;
+    for (const auto &scan : results) {
+      bool with_auth = false;
+      if (!wifi::should_show_scan_entry(results, scan, with_auth))
+        continue;
+      json_escape_into_buffer(esc, scan.get_ssid());
+      if (!first)
+        out += ",";
+      first = false;
+      out += "{\"ssid\":\"" + std::string(esc) + "\",\"rssi\":" + to_string(scan.get_rssi()) +
+             ",\"lock\":" + (with_auth ? "true" : "false") + "}";
+    }
+  }
+  out += "]}";
+  auto *r = request->beginResponse(200, "application/json", out);
+  r->addHeader("Cache-Control", "no-store");
+  request->send(r);
+}
+
+void ApPortal::http_requests_tick_(uint32_t now) {
+  bool scan = false, sta = false, ap_pw = false, ap_reset = false;
+  std::string ssid, psk, pw;
+  {
+    std::lock_guard<std::mutex> g(this->mu_);
+    if (this->http_scan_) {
+      scan = true;
+      this->http_scan_ = false;
+    }
+    if (this->http_sta_pending_ && ap_portal_core::reached(now, this->http_sta_at_)) {
+      sta = true;
+      this->http_sta_pending_ = false;
+      ssid.swap(this->http_sta_ssid_);
+      psk.swap(this->http_sta_psk_);
+    }
+    if (this->http_ap_pw_pending_) {
+      ap_pw = true;
+      ap_reset = this->http_ap_pw_reset_;
+      this->http_ap_pw_pending_ = false;
+      pw.swap(this->http_ap_pw_);
+    }
+  }
+  if (scan)
+    this->scan();
+  if (sta) {
+    ESP_LOGI(TAG, "Wi-Fi page: connecting to the router network '%s'", ssid.c_str());
+    wifi::global_wifi_component->save_wifi_sta(ssid, psk);  // saved by ESPHome, kept across reboots
+  }
+  if (ap_pw) {
+    if (ap_reset)
+      this->reset_password();
+    else
+      this->set_password(pw);  // applied 2 s later, the page got its answer
   }
 }
 
@@ -826,6 +972,9 @@ ap_portal_core::Vars ApPortal::page_vars_(const Classified &c) {
   v.emplace_back("landing", this->route_.landing_path);
   v.emplace_back("mode", mode_name(this->route_.mode));
   v.emplace_back("clients", to_string(this->client_count()));
+  v.emplace_back("wifi_path", this->route_.wifi_path);
+  v.emplace_back("ap_password_block", this->wifi_ap_password_ ? "1" : "");
+  v.emplace_back("custom_password", this->custom_password_ ? "1" : "");
   return v;
 }
 

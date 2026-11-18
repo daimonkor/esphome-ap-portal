@@ -48,6 +48,8 @@ class ApPortal : public Component, public AsyncWebHandler {
   void set_enter_path(const std::string &p) { this->route_.enter_path = p; }
   void set_enter_window(uint32_t ms) { this->passes_.set_window(ms); }
   void add_pass_path(const std::string &p) { this->route_.pass_paths.push_back(p); }
+  void set_wifi_path(const std::string &p) { this->route_.wifi_path = p; }
+  void set_wifi_ap_password(bool v) { this->wifi_ap_password_ = v; }
   void set_power_cycles(uint8_t n) { this->power_cycles_ = n; }
   void set_reset_hold(uint32_t ms) { this->reset_hold_.set_hold(ms); }
   void set_reset_pin(GPIOPin *pin) { this->reset_pin_ = pin; }
@@ -139,6 +141,10 @@ class ApPortal : public Component, public AsyncWebHandler {
   Classified classify_(AsyncWebServerRequest *request);
   void send_landing_(AsyncWebServerRequest *request, const Classified &c);
   void send_redirect_(AsyncWebServerRequest *request, const std::string &location);
+  void send_wifi_page_(AsyncWebServerRequest *request, const Classified &c);
+  void handle_api_(AsyncWebServerRequest *request, const Classified &c);
+  void send_networks_(AsyncWebServerRequest *request);
+  void http_requests_tick_(uint32_t now);
   void forward_(AsyncWebServerRequest *request);
   ap_portal_core::Vars page_vars_(const Classified &c);
   void refresh_lambda_vars_(uint32_t now);
@@ -206,6 +212,16 @@ class ApPortal : public Component, public AsyncWebHandler {
   std::string password_pending_value_;
   uint32_t password_apply_at_{0};
   ESPPreferenceObject password_pref_;
+
+  // the Wi-Fi page: requests from the web server task, carried out in loop() (under mu_)
+  bool wifi_ap_password_{true};
+  bool http_scan_{false};
+  bool http_sta_pending_{false};
+  std::string http_sta_ssid_, http_sta_psk_;
+  uint32_t http_sta_at_{0};
+  bool http_ap_pw_pending_{false};
+  bool http_ap_pw_reset_{false};
+  std::string http_ap_pw_;
 
   // password reset on the spot
   uint8_t power_cycles_{0};

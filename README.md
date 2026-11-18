@@ -85,6 +85,10 @@ ap_portal:
   on_ap_restored:               # ESPHome switched the access point off, ap_portal brought it back
   on_portal_start:
   on_portal_stop:
+  wifi_page:                    # built-in /wifi page, access point clients only (gate: after the button)
+    enabled: true               # scan list, connect to a router network, the access point password
+    path: /wifi                 # the landing page's second button leads here unless you set `secondary`
+    ap_password: true           # the access point password block
   password_reset:               # with password_persist: back to the password from wifi: ap:
     power_cycles: 4             # RESET button (or power) 4 times in a row, each start under 10 s; 0 = off
     # pin: GPIO2                # a button held while running; default: the board's BOOT button
@@ -102,6 +106,14 @@ gets its answer first; kept across reboots with `password_persist: true`),
 
 From lambdas: `id(portal).is_active()`, `client_count()`, `ap_ip()`, `ssid()`, `is_scanning()`,
 `has_custom_password()`.
+
+### The Wi-Fi page
+
+`/wifi` lists the networks around (a background scan while the router is connected), connects the
+device to a router network (saved by ESPHome, kept across reboots) and changes the access point
+password. Only clients of the access point get it — never the home network — and in gate mode only
+after the button. Its endpoints live under `/ap_portal/`. Turn it off with `wifi_page: {enabled:
+false}` when the device has its own Wi-Fi settings page.
 
 ### Forgot the access point password
 

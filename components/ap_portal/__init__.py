@@ -60,6 +60,8 @@ CONF_PASS_PATHS = "pass_paths"
 CONF_VARS = "vars"
 CONF_ON_LANDING = "on_landing"
 CONF_ON_ENTER = "on_enter"
+CONF_WIFI_PAGE = "wifi_page"
+CONF_AP_PASSWORD = "ap_password"
 CONF_PASSWORD_RESET = "password_reset"
 CONF_POWER_CYCLES = "power_cycles"
 CONF_HOLD = "hold"
@@ -81,7 +83,8 @@ CONF_ON_PORTAL_STOP = "on_portal_stop"
 BUILTIN_VARS = (
     "title", "ap_ip", "sta_ip", "host", "ssid", "enter", "landing", "mode", "clients",
     "accent_color", "accent_text", "icon_svg", "primary_label", "primary_default",
-    "secondary_label", "secondary_href",
+    "secondary_label", "secondary_href", "secondary_default",
+    "wifi_path", "ap_password_block", "custom_password",
 )
 GATE_KEYS = (CONF_ENTER_PATH, CONF_ENTER_WINDOW, CONF_PASS_PATHS)
 
@@ -144,6 +147,16 @@ def _power_cycles(value):
         raise cv.Invalid("power_cycles: 0 (off) or 2..9 — one power-on is every normal start")
     return value
 
+
+WIFI_PAGE_SCHEMA = cv.Schema(
+    {
+        # the built-in Wi-Fi page: scan list, router network, access point password;
+        # access point clients only. false = the device has its own Wi-Fi page.
+        cv.Optional(CONF_ENABLED, default=True): cv.boolean,
+        cv.Optional(CONF_PATH, default="/wifi"): _url_path,
+        cv.Optional(CONF_AP_PASSWORD, default=True): cv.boolean,
+    }
+)
 
 PASSWORD_RESET_SCHEMA = cv.Schema(
     {
@@ -235,6 +248,7 @@ CONFIG_SCHEMA = cv.All(
                 {cv.Optional(CONF_ENABLED, default=True): cv.boolean}
             ),
             cv.Optional(CONF_LANDING, default={}): cv.All(LANDING_SCHEMA, _validate_landing),
+            cv.Optional(CONF_WIFI_PAGE, default={}): WIFI_PAGE_SCHEMA,
             cv.Optional(CONF_PASSWORD_RESET, default={}): PASSWORD_RESET_SCHEMA,
             cv.Optional(CONF_ON_POWER_CYCLE): automation.validate_automation(
                 {cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(PowerCycleTrigger)}
@@ -309,6 +323,14 @@ def _final_validate(config):
                 f"SSID '{ssid}' with the MAC suffix ('-XXXXXX') is longer than 32 bytes; "
                 f"keep it to {32 - SUFFIX_LEN}."
             )
+
+    wp = config[CONF_WIFI_PAGE]
+    if wp[CONF_ENABLED]:
+        land = config[CONF_LANDING]
+        if wp[CONF_PATH] in (land[CONF_PATH], land.get(CONF_ENTER_PATH)):
+            raise cv.Invalid(f"wifi_page path '{wp[CONF_PATH]}' clashes with the landing paths")
+        if wp[CONF_PATH].startswith("/ap_portal/"):
+            raise cv.Invalid("wifi_page path: /ap_portal/ is reserved for its endpoints")
 
     cycles = config[CONF_PASSWORD_RESET][CONF_POWER_CYCLES]
     if config[CONF_PASSWORD_PERSIST] and cycles and "safe_mode" in full:
@@ -387,10 +409,19 @@ async def to_code(config):
         cg.add(var.add_static_var("icon_svg", _read(landing[CONF_ICON_SVG])))
     cg.add(var.add_static_var("primary_label", landing.get(CONF_PRIMARY_LABEL, "Open device page")))
     cg.add(var.add_static_var("primary_default", "" if CONF_PRIMARY_LABEL in landing else "1"))
+    wifi_page = config[CONF_WIFI_PAGE]
+    if wifi_page[CONF_ENABLED]:
+        cg.add(var.set_wifi_path(wifi_page[CONF_PATH]))
+        cg.add(var.set_wifi_ap_password(wifi_page[CONF_AP_PASSWORD]))
     if CONF_SECONDARY in landing:
         sec = landing[CONF_SECONDARY]
         cg.add(var.add_static_var("secondary_label", sec[CONF_LABEL]))
         cg.add(var.add_static_var("secondary_href", sec[CONF_HREF]))
+    elif wifi_page[CONF_ENABLED]:
+        # the second button of the built-in page leads to the Wi-Fi page by default
+        cg.add(var.add_static_var("secondary_label", "Router Wi-Fi"))
+        cg.add(var.add_static_var("secondary_href", wifi_page[CONF_PATH]))
+        cg.add(var.add_static_var("secondary_default", "1"))
     for name, value in landing[CONF_VARS].items():
         if isinstance(value, cv.Lambda):
             lam = await cg.process_lambda(value, [], return_type=cg.std_string)

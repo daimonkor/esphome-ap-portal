@@ -33,7 +33,11 @@ enum class Route : uint8_t {
   LANDING,   // answer with the landing page (200)
   REDIRECT,  // 302 to the landing page
   ENTER,     // gate: grant this client a pass, then 302 to "/"
+  WIFI,      // the built-in Wi-Fi page (router network, access point password)
+  API,       // /ap_portal/... — JSON and form endpoints of the Wi-Fi page
 };
+
+constexpr const char *API_PREFIX = "/ap_portal/";
 
 struct Request {
   bool get{true};        // only GET is ever intercepted
@@ -48,6 +52,7 @@ struct RouteConfig {
   std::string landing_path{"/welcome"};
   std::string enter_path{"/enter"};
   std::vector<std::string> pass_paths;  // gate: prefixes that are never intercepted
+  std::string wifi_path;                // the built-in Wi-Fi page; empty = off
 };
 
 // The connectivity checks of phones and computers. Android, iOS/macOS, Windows, Firefox, Kindle, ...
@@ -97,7 +102,16 @@ inline bool has_prefix(const std::string &s, const std::string &prefix) {
 // The single routing decision. Requests from the home network are never touched, so the
 // device's own pages behave exactly as without the portal.
 inline Route route(const Request &r, const RouteConfig &c) {
-  if (!r.get || !r.from_ap)
+  if (!r.from_ap)
+    return Route::PASS;  // the home network never sees the portal, the Wi-Fi page included
+  // The Wi-Fi page and its endpoints (GET and POST): access point clients only, in gate mode
+  // only with a pass.
+  if (!c.wifi_path.empty() && (r.path == c.wifi_path || has_prefix(r.path, API_PREFIX))) {
+    if (c.mode == Mode::GATE && !r.has_pass)
+      return r.get ? Route::LANDING : Route::PASS;
+    return r.path == c.wifi_path ? (r.get ? Route::WIFI : Route::PASS) : Route::API;
+  }
+  if (!r.get)
     return Route::PASS;
   if (c.mode == Mode::GATE) {
     if (r.path == c.enter_path)

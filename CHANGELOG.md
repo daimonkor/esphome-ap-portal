@@ -5,6 +5,9 @@ Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monito
 ## Unreleased
 
 ### Added
+- Built-in Wi-Fi page (`wifi_page:`, `/wifi`): scan list, connect to a router network
+  (`save_wifi_sta`, applied 2 s after the answer), the access point password; access point clients
+  only, in gate mode after the button. The landing page's second button leads there by default.
 - Password reset on the spot (`password_reset:`): the RESET button 4 times in a row (each start
   under 10 s) or BOOT held 5 s while running brings back the password from `wifi: ap:`. Only
   power-on / RESET starts count. Hooks `on_power_cycle` (count) and `on_password_reset` (source).
