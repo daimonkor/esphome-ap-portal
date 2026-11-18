@@ -13,6 +13,7 @@ Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monito
   within 30 s the previous one comes back (`previous`, `reverted` in `networks`; the toast says so).
 
 ### Added
+- Show / hide toggle (eye) in the password fields of the Wi-Fi popup and page.
 - Loading state while switching the router network: a full-screen layer over the popup / page
   (nothing underneath can be pressed) with a spinner, seconds counter, where to find the device and
   a hint that the phone may change networks; the result gets Open and Close.

@@ -67,6 +67,7 @@ a{color:{{accent_color}};text-decoration:none;font-weight:600}
 main{padding-bottom:140px}
 .sp{display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin .8s linear infinite;vertical-align:-2px;margin-right:8px}
 @keyframes spin{to{transform:rotate(360deg)}}button:disabled{opacity:.7;cursor:default}
+.pw{position:relative}.pw input{padding-right:48px}button.ey{position:absolute;right:6px;top:5px;width:38px;height:38px;padding:0;margin:0;border:0;background:none;color:inherit;opacity:.6;cursor:pointer;display:grid;place-items:center}button.ey svg{width:20px;height:20px;fill:currentColor}
 </style></head><body><main>
 <a href="/" id="bk">← {{title}}</a><h1 id="h">Wi-Fi</h1>
 <div class="c"><h2 id="hs">Router network</h2><div id="st" class="m">…</div></div>
@@ -74,11 +75,11 @@ main{padding-bottom:140px}
 <button class="s" id="rf" onclick="scan()">Search again</button></div>
 <div class="c"><h2 id="hc">Connect</h2>
 <input id="ss" placeholder="Network name (SSID)" autocomplete="off" autocapitalize="none">
-<input id="pw" type="password" placeholder="Password">
+<div class="pw"><input id="pw" type="password" placeholder="Password" autocomplete="off"><button type="button" class="ey" aria-label="Show password"></button></div>
 <button id="cn" onclick="conn()">Connect</button><div id="cm" class="m"></div></div>
 {{#if ap_password_block}}<div class="c"><h2 id="ha">Device Wi-Fi password</h2>
 <div class="m" id="as">{{#if custom_password}}Changed from this page{{else}}From the firmware{{/if}}</div><br>
-<input id="ap" type="password" placeholder="New password, 8–63 characters">
+<div class="pw"><input id="ap" type="password" placeholder="New password, 8–63 characters" autocomplete="new-password"><button type="button" class="ey" aria-label="Show password"></button></div>
 <button id="ab" onclick="appw()">Save</button>
 <button class="s" id="ar" onclick="aprs()">Back to the firmware password</button>
 <div id="am" class="m"></div></div>{{/if}}
@@ -118,7 +119,8 @@ function conn(){var s=g('ss').value;if(!s){g('cm').textContent=t('name');return}
 function appw(){var p=g('ap').value;if(p&&(p.length<8||p.length>63)){g('am').textContent=t('bad');return}
  apPortal.setApPassword(p).then(function(){g('am').textContent=t('saved')}).catch(function(e){g('am').textContent=String(e.message||e)})}
 function aprs(){apPortal.resetApPassword().then(function(){g('am').textContent=t('saved')}).catch(function(e){g('am').textContent=String(e.message||e)})}
-load();scan();(function(){var p=apPortal.pending.load();if(p)follow(p)})();
+function eyes(root){var o='<svg viewBox="0 0 24 24"><path d="M12 5C7 5 2.7 8.1 1 12c1.7 3.9 6 7 11 7s9.3-3.1 11-7c-1.7-3.9-6-7-11-7zm0 11.5a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9zm0-7a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z"/></svg>',c='<svg viewBox="0 0 24 24"><path d="M12 5C7 5 2.7 8.1 1 12c1.7 3.9 6 7 11 7s9.3-3.1 11-7c-1.7-3.9-6-7-11-7zm0 11.5a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9zm0-7a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z"/><path d="M3.3 2 22 20.7 20.7 22 2 3.3z"/></svg>';[].forEach.call(root.querySelectorAll('button.ey'),function(b){var i=b.previousElementSibling;b.innerHTML=o;b.onclick=function(){var h=i.type=='password';i.type=h?'text':'password';b.innerHTML=h?c:o;i.focus()}})}
+eyes(document);load();scan();(function(){var p=apPortal.pending.load();if(p)follow(p)})();
 </script></body></html>
 )HTML";
 
@@ -178,11 +180,12 @@ R.innerHTML='<style>:host{all:initial}*{box-sizing:border-box;font:15px/1.4 syst
 '.tt{display:none;position:fixed;inset:0;z-index:3;align-items:center;justify-content:center;padding:16px;background:rgba(11,13,18,.82);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}'+
 '.tc{width:100%;max-width:380px;background:#1b2230;color:#f2f4f8;border-radius:20px;padding:24px 20px;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,.45)}.tc b{display:block;font-size:17px;margin-bottom:6px}.tc div{margin-top:6px}.tc .m{opacity:.75}.tc .er{color:#ff8a8f}'+
 '.tc a{color:#9fc0ff;font-weight:600;text-decoration:none}.tc a.o{display:block;text-align:center;margin-top:14px;background:'+acc+';color:#fff;padding:12px;border-radius:12px}.tc button.s{border-color:rgba(255,255,255,.25)}'+
-'.sp.big{width:44px;height:44px;border-width:4px;margin:0 auto 16px;display:block;color:'+acc+'}</style>'+
+'.sp.big{width:44px;height:44px;border-width:4px;margin:0 auto 16px;display:block;color:'+acc+'}'+
+'.pw{position:relative}.pw input{padding-right:48px}button.ey{position:absolute;right:6px;top:5px;width:38px;height:38px;padding:0;margin:0;border:0;background:none;color:inherit;opacity:.6;cursor:pointer;display:grid;place-items:center}button.ey svg{width:20px;height:20px;fill:currentColor}</style>'+
 '<button class="fab" title="Wi-Fi"><svg viewBox="0 0 24 24"><path d="M12 21l3.6-4.8a6 6 0 0 0-7.2 0zm0-18C7.95 3 4.21 4.34 1.2 6.6L3 9a15 15 0 0 1 18 0l1.8-2.4A18.9 18.9 0 0 0 12 3zm0 6a12 12 0 0 0-7.2 2.4l1.8 2.4a9 9 0 0 1 10.8 0l1.8-2.4A12 12 0 0 0 12 9z"/></svg></button>'+
 '<div class="bg"><div class="p"><h2><span>'+X.t+'</span><button class="x" aria-label="'+X.close+'">✕</button></h2>'+
 '<div class="m" id="st">…</div><h3>'+X.nets+'</h3><ul id="ls"><li class="m">'+X.srch+'</li></ul><button class="s" id="rf">'+X.again+'</button>'+
-'<h3>'+X.st+'</h3><input id="ss" placeholder="'+X.ssid+'" autocapitalize="none" autocomplete="off"><input id="pw" type="password" placeholder="'+X.pw+'">'+
+'<h3>'+X.st+'</h3><input id="ss" placeholder="'+X.ssid+'" autocapitalize="none" autocomplete="off"><div class="pw"><input id="pw" type="password" placeholder="'+X.pw+'" autocomplete="off"><button type="button" class="ey" aria-label="Show password"></button></div>'+
 '<button class="b" id="go">'+X.go+'</button><div class="m" id="cm"></div></div></div><div class="tt" id="tt"></div>';
 var $=function(s){return R.querySelector(s)},bg=$('.bg'),open=false;
 function esc(x){var d=document.createElement('div');d.textContent=x;return d.innerHTML}
@@ -208,6 +211,8 @@ $('#go').onclick=function(){var s=$('#ss').value;if(!s){$('#cm').textContent=X.n
  apPortal.connect(s,$('#pw').value).then(function(r){var p={ssid:s,host:r.host,addresses:r.addresses,t:Date.now()};apPortal.pending.save(p);follow(p)})
  .catch(function(e){$('#cm').textContent=String(e.message||e)})};
 (function(){var p=apPortal.pending.load();if(p){show(true);follow(p)}})();
+function eyes(root){var o='<svg viewBox="0 0 24 24"><path d="M12 5C7 5 2.7 8.1 1 12c1.7 3.9 6 7 11 7s9.3-3.1 11-7c-1.7-3.9-6-7-11-7zm0 11.5a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9zm0-7a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z"/></svg>',c='<svg viewBox="0 0 24 24"><path d="M12 5C7 5 2.7 8.1 1 12c1.7 3.9 6 7 11 7s9.3-3.1 11-7c-1.7-3.9-6-7-11-7zm0 11.5a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9zm0-7a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z"/><path d="M3.3 2 22 20.7 20.7 22 2 3.3z"/></svg>';[].forEach.call(root.querySelectorAll('button.ey'),function(b){var i=b.previousElementSibling;b.innerHTML=o;b.onclick=function(){var h=i.type=='password';i.type=h?'text':'password';b.innerHTML=h?c:o;i.focus()}})}
+eyes(R);
 window.apPortalPopup={open:function(){show(true)},close:function(){show(false)}};
 })();
 )JS";
