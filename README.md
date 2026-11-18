@@ -92,6 +92,7 @@ ap_portal:
     timeout: 45s                # wait this long, then each step below in turn
     previous: true              # back to the network the device was on before
     firmware: true              # then to the network from the YAML (wifi: ssid / networks)
+    # firmware: {ssid: Backup-Net, password: !secret backup}   # or a fallback network of its own
   on_router_fallback:           # to: "previous" / "firmware" / "none", ssid
   wifi_page:                    # built-in /wifi page, access point clients only (gate: after the button)
     enabled: true               # scan list, connect to a router network, the access point password

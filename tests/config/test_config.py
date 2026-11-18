@@ -117,6 +117,7 @@ GOOD = {
           on_router_fallback:
             - logger.log: {format: "fallback to %s (%s)", args: [to.c_str(), ssid.c_str()]}
         """),
+    "fallback_own_network": "ap_portal:\n  router_fallback:\n    firmware: {ssid: Backup-Net, password: backup1234}\n",
     "suffix_fits": "ap_portal:\n  ssid_suffix_mac: true\n",
     "actions": textwrap.dedent("""\
         ap_portal:
@@ -189,6 +190,11 @@ BAD = {
     "wifi_page_without_api": (head(), "ap_portal:\n  api: {enabled: false}\n", "needs api"),
     "wifi_page_clash": (head(), "ap_portal:\n  wifi_page: {path: /welcome}\n", "clashes"),
     "fallback_too_short": (head(), "ap_portal:\n  router_fallback: {timeout: 5s}\n", "timeout"),
+    "fallback_short_password": (
+        head(),
+        "ap_portal:\n  router_fallback:\n    firmware: {ssid: Backup-Net, password: short}\n",
+        "8..64",
+    ),
     "removed_option": (head(), "ap_portal:\n  keep_ap: native\n", "keep_ap"),
 }
 

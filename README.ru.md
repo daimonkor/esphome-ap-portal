@@ -88,6 +88,7 @@ ap_portal:
     timeout: 45s                # ждать столько, затем по очереди шаги ниже
     previous: true              # вернуться к сети, на которой устройство было до этого
     firmware: true              # затем к сети из YAML (wifi: ssid / networks)
+    # firmware: {ssid: Backup-Net, password: !secret backup}   # или своя запасная сеть
   on_router_fallback:           # to: "previous" / "firmware" / "none", ssid
   wifi_page:                    # встроенная страница /wifi, только для клиентов точки (gate: после кнопки)
     enabled: true               # список сетей, подключение к роутеру, пароль точки доступа

@@ -145,6 +145,12 @@ def _hex_color(value):
     return "#" + h.lower()
 
 
+def _sta_password(value):
+    if value and not 8 <= len(value) <= 64:
+        raise cv.Invalid("a router password is empty (open network) or 8..64 characters")
+    return value
+
+
 def _reset_pin(value):
     if value is False or str(value).lower() in ("false", "off", "none"):
         return False
@@ -280,7 +286,19 @@ CONFIG_SCHEMA = cv.All(
                         cv.Range(min=cv.TimePeriod(seconds=15), max=cv.TimePeriod(minutes=10)),
                     ),
                     cv.Optional(CONF_PREVIOUS, default=True): cv.boolean,
-                    cv.Optional(CONF_FIRMWARE, default=True): cv.boolean,
+                    # true: the network from wifi: (ssid / networks[0]); false: off;
+                    # {ssid, password}: a fallback network of its own
+                    cv.Optional(CONF_FIRMWARE, default=True): cv.Any(
+                        cv.boolean,
+                        cv.Schema(
+                            {
+                                cv.Required(CONF_SSID): cv.ssid,
+                                cv.Optional(CONF_PASSWORD, default=""): cv.All(
+                                    cv.string_strict, _sta_password
+                                ),
+                            }
+                        ),
+                    ),
                 }
             ),
             cv.Optional(CONF_ON_ROUTER_FALLBACK): automation.validate_automation(
@@ -448,11 +466,15 @@ async def to_code(config):
     cg.add(var.add_static_var("primary_label", landing.get(CONF_PRIMARY_LABEL, "Open device page")))
     cg.add(var.add_static_var("primary_default", "" if CONF_PRIMARY_LABEL in landing else "1"))
     fb = config[CONF_ROUTER_FALLBACK]
-    cg.add(var.set_router_fallback(fb[CONF_TIMEOUT].total_milliseconds, fb[CONF_PREVIOUS], fb[CONF_FIRMWARE]))
-    nets = CORE.config.get("wifi", {}).get("networks", [])
-    if nets and fb[CONF_FIRMWARE]:
+    firmware = fb[CONF_FIRMWARE]
+    cg.add(var.set_router_fallback(fb[CONF_TIMEOUT].total_milliseconds, fb[CONF_PREVIOUS], bool(firmware)))
+    if isinstance(firmware, dict):
+        cg.add(var.set_firmware_sta(firmware[CONF_SSID], firmware[CONF_PASSWORD]))
+    elif firmware:
         # ESPHome does not hand out its YAML network before Wi-Fi starts; it is in the firmware anyway
-        cg.add(var.set_firmware_sta(nets[0].get(CONF_SSID, ""), nets[0].get(CONF_PASSWORD, "")))
+        nets = CORE.config.get("wifi", {}).get("networks", [])
+        if nets:
+            cg.add(var.set_firmware_sta(nets[0].get(CONF_SSID, ""), nets[0].get(CONF_PASSWORD, "")))
     for conf in config.get(CONF_ON_ROUTER_FALLBACK, []):
         trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var)
         await automation.build_automation(trigger, [(cg.std_string, "to"), (cg.std_string, "ssid")], conf)
