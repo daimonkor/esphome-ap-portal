@@ -11,6 +11,8 @@ Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monito
   back (`previous`, `reverted` in `networks`; the toast says so).
 
 ### Added
+- Loading state while switching the router network: a spinner on the Connect button (disabled)
+  and in the toast with a seconds counter.
 - The Wi-Fi page and popup say why a router network does not take (wrong password, not found,
   failed — from the last disconnect reason, `target` / `sta_error` in `networks`), keep waiting
   for the device after the page was closed and opened again, scroll in the bottom sheet; the lock

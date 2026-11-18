@@ -61,6 +61,8 @@ a{color:{{accent_color}};text-decoration:none;font-weight:600}
 .tt{display:none;position:fixed;left:12px;right:12px;bottom:12px;max-width:420px;margin:0 auto;background:#1b2230;color:#f2f4f8;border-radius:16px;padding:14px 16px;font-size:14px;box-shadow:0 8px 30px rgba(0,0,0,.35)}
 .tt div{margin-top:4px}.tt .m{opacity:.75}.tt a{color:#9fc0ff}.tt a.tb{display:block;text-align:center;margin-top:10px;background:{{accent_color}};color:{{accent_text}};padding:11px;border-radius:12px}
 main{padding-bottom:140px}
+.sp{display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin .8s linear infinite;vertical-align:-2px;margin-right:8px}
+@keyframes spin{to{transform:rotate(360deg)}}button:disabled{opacity:.7;cursor:default}
 </style></head><body><main>
 <a href="/" id="bk">← {{title}}</a><h1 id="h">Wi-Fi</h1>
 <div class="c"><h2 id="hs">Router network</h2><div id="st" class="m">…</div></div>
@@ -97,8 +99,10 @@ function load(){apPortal.networks().then(function(j){
   li.appendChild(a);li.appendChild(b);if(n.ssid==g('ss').value)li.className='sel';li.onclick=function(){g('ss').value=n.ssid;g('pw').focus();load()};ls.appendChild(li)});
  if(j.scanning)setTimeout(load,1500)}).catch(function(){setTimeout(load,3000)})}
 function scan(){apPortal.scan().then(function(){setTimeout(load,800)})}
-function follow(p){toast('<b>'+t('going1')+' «'+esc(p.ssid)+'»…</b><div class="m">'+t('going2')+'</div>'+addrs(p.addresses));
- apPortal.watch(p.ssid,{host:p.host,since:p.t}).then(function(x){apPortal.pending.clear();toast('<b>'+t('found')+' «'+esc(p.ssid)+'»: '+x.ip+'</b>',{url:x.url,label:t('open')})})
+var tick=null;function busy(on){var b=g('cn');b.disabled=on;b.innerHTML=on?'<span class="sp"></span>'+esc(X.cn||'Connect'):esc(X.cn||'Connect');
+ clearInterval(tick);if(on)tick=setInterval(function(){var e=g('tc');if(e)e.textContent=Math.round((Date.now()-busy.t)/1000)+' s'},500)}
+function follow(p){busy.t=p.t;busy(true);toast('<b><span class="sp"></span>'+t('going1')+' «'+esc(p.ssid)+'»… <span id="tc"></span></b><div class="m">'+t('going2')+'</div>'+addrs(p.addresses));
+ apPortal.watch(p.ssid,{host:p.host,since:p.t}).finally(function(){busy(false)}).then(function(x){apPortal.pending.clear();toast('<b>'+t('found')+' «'+esc(p.ssid)+'»: '+x.ip+'</b>',{url:x.url,label:t('open')})})
  .catch(function(e){apPortal.pending.clear();if(e.code)toast('<b class="er">'+t('err')+' «'+esc(p.ssid)+'»: '+t(e.code)+'</b><div class="m">'+(e.previous?t('back')+' «'+esc(e.previous)+'».':t('stay'))+'</div>');else toast('<b>'+t('lost')+'</b>'+addrs(p.addresses))})}
 function conn(){var s=g('ss').value;if(!s){g('cm').textContent=t('name');return}
  apPortal.connect(s,g('pw').value).then(function(r){g('cm').textContent='';var p={ssid:s,host:r.host,addresses:r.addresses,t:Date.now()};apPortal.pending.save(p);follow(p)})
@@ -162,6 +166,7 @@ R.innerHTML='<style>:host{all:initial}*{box-sizing:border-box;font:15px/1.4 syst
 '.m{font-size:13px;opacity:.7}.ok{color:#22a559}.er{color:#e5484d}.lk{font-size:12px;margin-left:6px;opacity:.8}ul{list-style:none;margin:0;padding:0}li{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 4px;border-bottom:1px solid rgba(127,127,127,.18);cursor:pointer}'+
 'li.sel{color:'+acc+';font-weight:600}input{width:100%;padding:11px;border-radius:12px;border:1px solid rgba(127,127,127,.35);margin:0 0 8px;background:#fff}'+
 'button.b{width:100%;padding:12px;border-radius:12px;border:0;background:'+acc+';color:#fff;font-weight:700;cursor:pointer}button.s{width:100%;padding:10px;border-radius:12px;border:1px solid rgba(127,127,127,.35);background:none;color:inherit;font-weight:600;cursor:pointer;margin-top:8px}'+
+'.sp{display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin .8s linear infinite;vertical-align:-2px;margin-right:8px}@keyframes spin{to{transform:rotate(360deg)}}button:disabled{opacity:.7;cursor:default}'+
 '.tt{margin-top:12px;padding:12px;border-radius:12px;background:rgba(127,127,127,.12);display:none}.tt a{color:'+acc+';font-weight:600;text-decoration:none}.tt a.o{display:block;text-align:center;margin-top:8px;background:'+acc+';color:#fff;padding:10px;border-radius:12px}</style>'+
 '<button class="fab" title="Wi-Fi"><svg viewBox="0 0 24 24"><path d="M12 21l3.6-4.8a6 6 0 0 0-7.2 0zm0-18C7.95 3 4.21 4.34 1.2 6.6L3 9a15 15 0 0 1 18 0l1.8-2.4A18.9 18.9 0 0 0 12 3zm0 6a12 12 0 0 0-7.2 2.4l1.8 2.4a9 9 0 0 1 10.8 0l1.8-2.4A12 12 0 0 0 12 9z"/></svg></button>'+
 '<div class="bg"><div class="p"><h2><span>'+X.t+'</span><button class="x" aria-label="'+X.close+'">✕</button></h2>'+
@@ -182,8 +187,10 @@ function load(){if(!open)return;apPortal.networks().then(function(j){
 function show(v){open=v;bg.classList.toggle('on',v);if(v){apPortal.scan().then(function(){setTimeout(load,800)});load()}}
 $('.fab').onclick=function(){show(true)};$('.x').onclick=function(){show(false)};bg.onclick=function(e){if(e.target===bg)show(false)};
 $('#rf').onclick=function(){apPortal.scan().then(function(){setTimeout(load,800)})};
-function follow(p){toast('<b>'+X.g1+' «'+esc(p.ssid)+'»…</b><div class="m">'+X.g2+'</div>'+addrs(p.addresses));
- apPortal.watch(p.ssid,{host:p.host,since:p.t}).then(function(x){apPortal.pending.clear();toast('<b>'+X.found+' «'+esc(p.ssid)+'»: '+x.ip+'</b>',x.url)})
+var tick=null;function busy(on){var b=$('#go');b.disabled=on;b.innerHTML=(on?'<span class="sp"></span>':'')+esc(X.go);
+ clearInterval(tick);if(on)tick=setInterval(function(){var e=$('#tc');if(e)e.textContent=Math.round((Date.now()-busy.t)/1000)+' s'},500)}
+function follow(p){busy.t=p.t;busy(true);toast('<b><span class="sp"></span>'+X.g1+' «'+esc(p.ssid)+'»… <span id="tc"></span></b><div class="m">'+X.g2+'</div>'+addrs(p.addresses));
+ apPortal.watch(p.ssid,{host:p.host,since:p.t}).finally(function(){busy(false)}).then(function(x){apPortal.pending.clear();toast('<b>'+X.found+' «'+esc(p.ssid)+'»: '+x.ip+'</b>',x.url)})
  .catch(function(e){apPortal.pending.clear();if(e.code)toast('<b class="er">'+X.err+' «'+esc(p.ssid)+'»: '+(X[e.code]||e.code)+'</b><div class="m">'+(e.previous?X.back+' «'+esc(e.previous)+'».':X.stay)+'</div>');else toast('<b>'+X.lost+'</b>'+addrs(p.addresses))})}
 $('#go').onclick=function(){var s=$('#ss').value;if(!s){$('#cm').textContent=X.name;return}$('#cm').textContent='';
  apPortal.connect(s,$('#pw').value).then(function(r){var p={ssid:s,host:r.host,addresses:r.addresses,t:Date.now()};apPortal.pending.save(p);follow(p)})
