@@ -110,7 +110,8 @@ there is a way back that needs no network:
   under 10 s) — the 4th start comes up with the password from `wifi: ap:`;
 - or hold **BOOT** for 5 s while the device runs.
 
-Only power-on and RESET-button starts count: deep-sleep wake-ups, OTA and software restarts,
+Every quick start also counts towards ESPHome's `safe_mode` (10 starts under 60 s), so between
+two series let the device run for a minute. Only power-on and RESET-button starts count: deep-sleep wake-ups, OTA and software restarts,
 crashes and brown-outs never do. If the BOOT pin is used by something else in your
 configuration, holding BOOT is switched off (the build says so); set `pin:` to your own button.
 
