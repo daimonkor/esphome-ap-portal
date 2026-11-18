@@ -1,11 +1,17 @@
 #pragma once
 // ap_portal — the device's own access point next to the router connection.
-// Stage 2 of the plan: configuration, triggers and actions are wired up; the access point,
-// DNS, landing page and quiet mode arrive in stages 3–4 (see ap_portal_core.h for the logic).
+// Stage 3: access point keeper, DNS, DHCP, quiet mode with channel lock, client events.
+// Stage 4 adds the landing page, gate and the actions (see ap_portal_core.h for the logic).
 
+#include <atomic>
 #include <functional>
 #include <string>
 #include <vector>
+
+#include <esp_event.h>
+#include <esp_wifi_types.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
 
 #include "esphome/core/automation.h"
 #include "esphome/core/component.h"
@@ -41,6 +47,7 @@ class ApPortal : public Component {
   void setup() override;
   void loop() override;
   void dump_config() override;
+  void on_shutdown() override;  // deep sleep / reboot: close DNS, give the radio its channels back
   // After network (event loop), before wifi (250) and web_server (249): the access point
   // settings reach ESPHome before Wi-Fi starts, and our HTTP handler goes in first.
   float get_setup_priority() const override { return setup_priority::WIFI + 10.0f; }
@@ -56,6 +63,12 @@ class ApPortal : public Component {
   std::string ap_ip() const;
   std::string ssid() const;
   bool is_scanning() const { return this->scanning_; }
+  // diagnostics (for tests and sensors)
+  bool is_quiet() const { return this->quiet_ours_; }
+  uint8_t locked_channel() const { return this->lock_.locked() ? this->lock_.channel() : 0; }
+  uint32_t lock_widens() const { return this->lock_.widens(); }
+  uint32_t ap_raises() const { return this->ap_raises_; }
+  uint32_t quiet_starts() const { return this->quiet_starts_; }
 
   // ── triggers ──
   void add_on_client_connected(std::function<void(std::string)> &&cb) {
@@ -70,6 +83,47 @@ class ApPortal : public Component {
 
  protected:
   bool want_active_() const { return this->active_lambda_ ? this->active_lambda_() : this->active_; }
+
+  // ESP-IDF event task -> loop(): only a queue, no state is touched there.
+  struct Event {
+    uint8_t type;  // EV_*
+    uint8_t mac[6];
+  };
+  enum : uint8_t { EV_JOIN = 1, EV_LEAVE = 2, EV_AP_STOP = 3 };
+  static void on_wifi_event_(void *arg, esp_event_base_t base, int32_t id, void *data);
+  void register_events_();
+  void drain_events_();
+
+  bool ap_up_() const;
+  void keep_ap_(uint32_t now);
+  void stop_ap_();
+  void configure_dhcp_();
+  void dns_tick_();
+  void dns_close_();
+  void quiet_tick_(uint32_t now, bool router);
+  void lock_apply_(uint8_t channel);
+  void lock_release_();
+  uint32_t ap_ip_be_() const;
+
+  QueueHandle_t events_{nullptr};
+  bool events_registered_{false};
+  std::atomic<uint32_t> ap_stop_ms_{0};
+
+  bool ap_was_up_{false};
+  bool ap_stopped_by_esphome_{false};
+  bool dhcp_done_{false};
+  uint32_t ap_raises_{0};
+
+  int dns_sock_{-1};
+  uint32_t dns_bound_ip_{0};
+
+  bool quiet_ours_{false};
+  uint32_t quiet_starts_{0};
+  uint32_t router_since_{0};
+  uint32_t no_clients_since_{0};
+  ap_portal_core::ChannelLock lock_;
+  bool country_saved_{false};
+  wifi_country_t country_orig_{};
 
   bool active_{true};
   std::function<bool()> active_lambda_;

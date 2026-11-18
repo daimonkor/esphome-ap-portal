@@ -5,6 +5,15 @@ Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monito
 ## Unreleased
 
 ### Added
+- Stage 3, the core: the access point stays up next to the router connection (ESPHome's fallback
+  access point is switched off, ours is raised again after ESPHome turns it off), `manual_ip` and
+  DHCP (.100–.110, DNS = access point) applied to it, own DNS on the access point address,
+  client join/leave events (`on_client_connected` / `on_client_disconnected`, `on_ap_restored`,
+  `on_portal_start` / `on_portal_stop`), `active:` switches everything on and off.
+- Quiet mode: a client on the access point and no router -> `captive_portal` is started so ESPHome
+  stops full scans and adapter restarts; the radio is locked to the access point's channel with a
+  20 s full search every 3 min; off 3 s after the router is back or 60 s after the last client left.
+- `ssid_suffix_mac` applied before Wi-Fi starts.
 - Component skeleton: configuration schema, build checks, triggers and actions (`ap_portal.scan`,
   `ap_portal.set_password`, `ap_portal.reset_password`). The access point itself is not managed yet.
 - `ap_portal_core.h`: request routing (redirect / page / gate), per-client gate passes,
