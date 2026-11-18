@@ -412,7 +412,9 @@ void ApPortal::keep_ap_(uint32_t now) {
     return;
   }
   ESP_LOGI(TAG, "Access point '%s' up on channel %u", ssid.c_str(), (unsigned) ch);
-  if (this->ap_was_up_ && this->ap_stopped_by_esphome_)
+  // "Restored" only when we had raised it before: the first raise after boot (ESPHome switches the
+  // access point off on its first connect) is not a restore.
+  if (this->ap_raises_ > 1 && this->ap_was_up_ && this->ap_stopped_by_esphome_)
     this->on_ap_restored_.call();
   this->ap_stopped_by_esphome_ = false;
   this->ap_was_up_ = true;
