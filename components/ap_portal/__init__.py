@@ -420,6 +420,16 @@ def _final_validate(config):
             TESTED_ESPHOME,
             ESPHOME_VERSION,
         )
+        if config[CONF_KEEP_AP_ON_CONNECT] or config[CONF_AP_MODE] == "fallback":
+            _LOGGER.warning(
+                "ap_portal: keep_ap_on_connect%s clears ESPHome's private WiFiComponent::has_ap_, "
+                "checked only on ESPHome %s.x. On %s check after flashing: the log shows "
+                "'Access point kept on router connections', there is no 'Disabling AP' when the "
+                "router connects, and the device does not reboot without a router.",
+                " (implied by ap_mode: fallback)" if not config[CONF_KEEP_AP_ON_CONNECT] else "",
+                TESTED_ESPHOME,
+                ESPHOME_VERSION,
+            )
     return config
 
 

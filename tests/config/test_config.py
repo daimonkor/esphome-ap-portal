@@ -233,3 +233,16 @@ def test_good_config_has_no_ap_portal_warning(tmp_path):
     r, out = run(tmp_path, head() + "ap_portal:\n")
     assert r.returncode == 0, out[-2000:]
     assert "ap_portal:" not in "\n".join(l for l in out.splitlines() if "WARNING" in l), out[-2000:]
+
+
+def test_keep_ap_options_valid_without_warning_on_tested_esphome(tmp_path):
+    for opts in ("  keep_ap_on_connect: true\n", "  ap_mode: fallback\n  fallback: {after: 20s, off_when_idle: 2min}\n"):
+        r, out = run(tmp_path, head() + "ap_portal:\n" + opts)
+        assert r.returncode == 0, out[-2000:]
+        assert "has_ap_" not in out, out[-2000:]
+
+
+def test_ap_mode_rejects_unknown(tmp_path):
+    r, out = run(tmp_path, head() + "ap_portal:\n  ap_mode: sometimes\n")
+    assert r.returncode != 0
+    assert "ap_mode" in out or "sometimes" in out, out[-2000:]
