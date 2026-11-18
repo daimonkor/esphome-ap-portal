@@ -100,11 +100,13 @@ void ApPortal::loop() {
   if (router) {
     // One radio: connected, the access point serves on the router's channel. Remember it — after
     // the router is lost the radio wanders through ESPHome's scans and its current channel means
-    // nothing.
-    uint8_t ch = 0;
-    wifi_second_chan_t sec;
-    if (esp_wifi_get_channel(&ch, &sec) == ESP_OK && ch != 0)
-      this->ap_channel_ = ch;
+    // nothing. Ask the driver for the association itself, not for the radio channel: ESPHome may
+    // still report "connected" for a moment after Wi-Fi was restarted, while the radio already sits
+    // on channel 1 (2026-11-18: remembered 1 with the router on 9). Without an association this
+    // call fails and the remembered channel stays.
+    wifi_ap_record_t info{};
+    if (esp_wifi_sta_get_ap_info(&info) == ESP_OK && info.primary != 0)
+      this->ap_channel_ = info.primary;
   }
   this->keep_ap_(now);
   if (!this->ap_up_()) {
