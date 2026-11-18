@@ -61,7 +61,7 @@ input{width:100%;box-sizing:border-box;font:inherit;padding:12px;border-radius:1
 button{width:100%;font:inherit;font-weight:700;padding:13px;border-radius:12px;border:0;background:{{accent_color}};color:{{accent_text}};cursor:pointer}
 button.s{background:transparent;color:inherit;border:1px solid rgba(127,127,127,.35);font-weight:600;margin-top:8px}
 a{color:{{accent_color}};text-decoration:none;font-weight:600}
-.tt{display:none;position:fixed;inset:0;z-index:50;align-items:center;justify-content:center;padding:16px;background:rgba(11,13,18,.82);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
+.tt{display:none;position:fixed;top:0;right:0;bottom:0;left:0;z-index:50;align-items:center;justify-content:center;padding:16px;background:rgba(11,13,18,.82);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
 .tc{width:100%;max-width:380px;background:#1b2230;color:#f2f4f8;border-radius:20px;padding:24px 20px;text-align:center;font-size:15px;box-shadow:0 12px 40px rgba(0,0,0,.45)}
 .tc b{display:block;font-size:17px;margin-bottom:6px}.tc div{margin-top:6px}.tc .m{opacity:.75}.tc a{color:#9fc0ff}.tc .er{color:#ff8a8f}
 .tc a.tb{display:block;text-align:center;margin-top:14px;background:{{accent_color}};color:{{accent_text}};padding:12px;border-radius:12px;font-weight:700}
@@ -101,26 +101,27 @@ function toast(html,btn,wait){var e=g('tt');e.innerHTML='<div class="tc">'+(wait
  if(btn){var b=document.createElement('a');b.className='tb';b.href=btn.url;b.textContent=btn.label;c.appendChild(b)}
  if(!wait){var x=document.createElement('button');x.className='cl';x.textContent=t('close');x.onclick=function(){e.style.display='none'};c.appendChild(x)}
  e.style.display='flex'}
-function esc(x){var d=document.createElement('div');d.textContent=x;return d.innerHTML}
-function addrs(a){return a.map(function(x){return '<div>'+(x.kind=='ap'?t('viaap')+' «'+esc(x.ssid)+'»: ':t('vianew')+': ')+'<a class="cp" href="'+x.url+'" data-copy="'+x.url+'">'+x.url+'</a> <a class="go" href="'+x.url+'" target="_blank" rel="noopener">↗</a></div>'}).join('')+'<div class="m">'+t('tapcopy')+'</div>'}
+function esc(x){return String(x==null?'':x).replace(/[&<>"']/g,function(c){return'&#'+c.charCodeAt(0)+';'})}
+function addrs(a){return a.map(function(x){return '<div>'+(x.kind=='ap'?t('viaap')+' «'+esc(x.ssid)+'»: ':t('vianew')+': ')+'<a class="cp" href="'+esc(x.url)+'" data-copy="'+esc(x.url)+'">'+esc(x.url)+'</a> <a class="go" href="'+esc(x.url)+'" target="_blank" rel="noopener">↗</a></div>'}).join('')+'<div class="m">'+t('tapcopy')+'</div>'}
 function copyText(t){try{if(navigator.clipboard&&window.isSecureContext){navigator.clipboard.writeText(t);return}}catch(e){}var a=document.createElement('textarea');a.value=t;a.setAttribute('readonly','');a.style.cssText='position:fixed;top:0;left:0;opacity:0';document.body.appendChild(a);a.select();a.setSelectionRange(0,t.length);try{document.execCommand('copy')}catch(e){}document.body.removeChild(a)}
 function onCopy(root,label){root.addEventListener('click',function(e){var a=e.target.closest&&e.target.closest('a.cp');if(!a)return;e.preventDefault();copyText(a.getAttribute('data-copy'));var o=a.textContent;a.textContent='\u2713 '+label;setTimeout(function(){a.textContent=o},1800)})}
 onCopy(document,t('copied'));
+var lt=0;function again(ms){clearTimeout(lt);lt=setTimeout(load,ms)}
 function load(){apPortal.networks().then(function(j){
  later(j.later);g('st').innerHTML='';var s=document.createElement('span');s.className=j.connected?'ok':'m';
  s.textContent=j.connected?t('con')+j.ssid+' · '+j.ip+' · '+j.rssi+' dBm':t('none');g('st').appendChild(s);
  var ls=g('ls');ls.innerHTML='';if(!j.networks.length){var e=document.createElement('li');e.className='m';e.textContent=j.scanning?(X.ld||'Searching…'):t('empty');ls.appendChild(e)}
  j.networks.forEach(function(n){var li=document.createElement('li');var a=document.createElement('span');a.textContent=n.ssid;if(n.lock){var l=document.createElement('span');l.className='lk';l.textContent='🔒';a.appendChild(l)}var b=document.createElement('span');b.className='m';b.textContent=bars(n.rssi);
   li.appendChild(a);li.appendChild(b);if(n.ssid==g('ss').value)li.className='sel';li.onclick=function(){g('ss').value=n.ssid;g('pw').focus();load()};ls.appendChild(li)});
- if(j.scanning)setTimeout(load,1500)}).catch(function(){setTimeout(load,3000)})}
-function scan(){apPortal.scan().then(function(){setTimeout(load,800)})}
+ if(j.scanning)again(1500)}).catch(function(){again(3000)})}
+function scan(){apPortal.scan().then(function(){again(800)},function(e){fail('cm',e.code||String(e.message||e))})}
 var tick=null;function busy(on){var b=g('cn');b.disabled=on;b.innerHTML=on?'<span class="sp"></span>'+esc(X.cn||'Connect now'):esc(X.cn||'Connect now');
  clearInterval(tick);if(on)tick=setInterval(function(){var e=g('tc');if(e)e.textContent=Math.round((Date.now()-busy.t)/1000)+' s'},500)}
 function follow(p){busy.t=p.t;busy(true);toast('<b>'+t('going1')+' «'+esc(p.ssid)+'»… <span id="tc"></span></b><div class="m">'+t('going2')+'</div>'+addrs(p.addresses)+'<div class="m">'+t('phone')+'</div>',null,true);
- apPortal.watch(p.ssid,{host:p.host,since:p.t}).finally(function(){busy(false)}).then(function(x){apPortal.pending.clear();
+ apPortal.watch(p.ssid,{host:p.host,since:p.t}).then(function(x){busy(false);return x},function(e){busy(false);throw e}).then(function(x){apPortal.pending.clear();
   if(x.onAp)toast('<b>'+t('found')+' «'+esc(p.ssid)+'»</b>'+addrs([{kind:'new',url:x.url}])+'<div class="m">'+t('stayap')+'</div>');
-  else toast('<b>'+t('found')+' «'+esc(p.ssid)+'»: '+x.ip+'</b>',{url:x.url,label:t('open')})})
- .catch(function(e){apPortal.pending.clear();if(e.code)toast('<b class="er">'+t('err')+' «'+esc(p.ssid)+'»: '+t(e.code)+'</b><div class="m">'+(e.previous?t('back')+' «'+esc(e.previous)+'».':t('stay'))+'</div>');else toast('<b>'+t('lost')+'</b>'+addrs(p.addresses))})}
+  else toast('<b>'+t('found')+' «'+esc(p.ssid)+'»: '+esc(x.ip)+'</b>',{url:x.url,label:t('open')})})
+ .catch(function(e){apPortal.pending.clear();if(e.code)toast('<b class="er">'+t('err')+' «'+esc(p.ssid)+'»: '+esc(t(e.code))+'</b><div class="m">'+(e.previous?t('back')+' «'+esc(e.previous)+'».':t('stay'))+'</div>');else toast('<b>'+t('lost')+'</b>'+addrs(p.addresses))})}
 // Field check before sending; the device answers with the same codes (shown the same way).
 function fail(box,code,field){var m=g(box);m.className='m err';m.textContent=t(code)||code;if(field){g(field).classList.add('bad');g(field).focus()}}
 function clr(box){var m=g(box);m.className='m';m.textContent='';['ss','pw','ap'].forEach(function(i){var e=g(i);if(e)e.classList.remove('bad')})}
@@ -130,10 +131,10 @@ function conn(){var s=sta();if(!s)return;
  .catch(function(e){fail('cm',e.code||String(e.message||e))})}
 function later(n){var e=g('lt');if(!n){e.innerHTML='';return}
  e.innerHTML='<div><b>'+t('lw')+' «'+esc(n)+'»</b><div class="m">'+t('lh')+'</div><div class="row"><button id="la">'+esc(t('cnow'))+'</button><button class="s" id="lc">'+esc(t('lx'))+'</button></div></div>';
- g('la').onclick=function(){apPortal.networks().then(function(s){return apPortal.apply().then(function(){var p={ssid:n,host:s.host,addresses:apPortal.addresses(s,n),t:Date.now()};apPortal.pending.save(p);e.innerHTML='';follow(p)})})};
- g('lc').onclick=function(){apPortal.cancel().then(function(){e.innerHTML='';setTimeout(load,500)})}}
+ g('la').onclick=function(){apPortal.networks().then(function(s){return apPortal.apply().then(function(){var p={ssid:n,host:s.host,addresses:apPortal.addresses(s,n),t:Date.now()};apPortal.pending.save(p);e.innerHTML='';follow(p)})}).catch(function(x){fail('cm',x.code||String(x.message||x))})};
+ g('lc').onclick=function(){apPortal.cancel().then(function(){e.innerHTML='';again(500)},function(x){fail('cm',x.code||String(x.message||x))})}}
 function connLater(){var s=sta();if(!s)return;
- apPortal.connect(s,g('pw').value,{later:true}).then(function(){later(s);setTimeout(load,800)}).catch(function(e){fail('cm',e.code||String(e.message||e))})}
+ apPortal.connect(s,g('pw').value,{later:true}).then(function(){later(s);again(800)}).catch(function(e){fail('cm',e.code||String(e.message||e))})}
 function appw(){clr('am');var p=g('ap').value,c=apPortal.check.apPassword(p);if(c){fail('am',c,'ap');return}
  apPortal.setApPassword(p).then(function(){g('am').textContent=t('saved')}).catch(function(e){fail('am',e.code||String(e.message||e),'ap')})}
 function aprs(){apPortal.resetApPassword().then(function(){g('am').textContent=t('saved')}).catch(function(e){g('am').textContent=String(e.message||e)})}
@@ -168,7 +169,7 @@ function f(d){var b=[];for(var k in d)b.push(k+'='+encodeURIComponent(d[k]));ret
 var P={base:'',
 // The same rules as the device: '' when fine, otherwise the error code it would answer with.
 check:{ssid:function(s){return !s?'ssid_empty':bytes(s)>32?'ssid_long':''},
- psk:function(p){return p&&(p.length<8||p.length>64)?'psk_length':''},
+ psk:function(p){var n=p?bytes(p):0;return p&&(n<8||n>64)?'psk_length':''},
  apPassword:function(p){return p&&(p.length<8||p.length>63||/[^\x20-\x7e]/.test(p))?'ap_password_length':''}},
 networks:function(){return j(P.base+A+'networks')},
 scan:function(){return j(P.base+A+'scan',f({}))},
@@ -179,10 +180,10 @@ cancel:function(){return j(P.base+A+'cancel',f({}))},
 watch:function(ssid,o){o=o||{};var t0=o.since||Date.now(),lim=o.timeout||90000,iv=o.interval||3000,u=[P.base+A+'networks'],bad=0;
  if(o.host)u.push('http://'+o.host+'.local'+A+'networks');
  return new Promise(function(res,rej){(function tick(){if(Date.now()-t0>lim)return rej(new Error('timeout'));var i=0;
-  (function next(){if(i>=u.length)return setTimeout(tick,iv);var c=new AbortController(),k=setTimeout(function(){c.abort()},2500),n=i;
-   j(u[i++],{signal:c.signal}).then(function(s){clearTimeout(k);if(s.connected&&s.ssid===ssid&&s.ip)return res({ip:s.ip,url:'http://'+s.ip+'/',state:s,
+  (function next(){if(i>=u.length)return setTimeout(tick,iv);var c=window.AbortController?new AbortController():null,k=setTimeout(function(){if(c)c.abort()},2500),n=i;
+   j(u[i++],c?{signal:c.signal}:{}).then(function(s){clearTimeout(k);if(s.connected&&s.ssid===ssid&&/^\d{1,3}(\.\d{1,3}){3}$/.test(s.ip))return res({ip:s.ip,url:'http://'+s.ip+'/',state:s,
      onAp:n===0&&location.hostname===s.ap_ip});
-    if(s.target===ssid&&(s.sta_error||s.reverted)){if(s.reverted||++bad>=2){var e=new Error(s.sta_error||'failed');e.code=s.sta_error||'failed';e.previous=s.previous;return rej(e)}}else bad=0;next()}).catch(function(){clearTimeout(k);next()})})()})()})},
+    if(s.target===ssid&&(s.sta_error||s.reverted)){if(s.reverted||++bad>=2){var ec=/^[a-z0-9_]{1,32}$/.test(s.sta_error||'')?s.sta_error:'failed';var e=new Error(ec);e.code=ec;e.previous=s.previous;return rej(e)}}else bad=0;next()}).catch(function(){clearTimeout(k);next()})})()})()})},
 pending:{key:'apPortalWatch',save:function(o){try{localStorage.setItem(this.key,JSON.stringify(o))}catch(e){}},
  load:function(){try{var o=JSON.parse(localStorage.getItem(this.key)||'null');return o&&Date.now()-o.t<180000?o:null}catch(e){return null}},
  clear:function(){try{localStorage.removeItem(this.key)}catch(e){}}},
@@ -201,10 +202,10 @@ en:{ssid_empty:'Enter the network name',ssid_long:'The network name is longer th
 uk:{ssid_empty:'Вкажіть назву мережі',ssid_long:'Назва мережі довша за 32 байти',psk_length:'Пароль — 8–64 символи (або порожній для відкритої мережі)',ap_password_length:'8–63 символи (латиниця, цифри, знаки) або порожньо для відкритої мережі',gl:'Зберегти, підключити пізніше',lw:'Чекає підключення:',lh:'Пристрій лишається у поточній мережі, поки ви на його Wi-Fi. Підключиться, коли останній телефон від\'єднається від його Wi-Fi, або після перезавантаження.',lx:'Скасувати',sap:'Ви на Wi-Fi пристрою — продовжуйте тут. Адреса вище — для домашньої мережі.',tap:'Натисніть адресу, щоб скопіювати.',cop:'Скопійовано',ph:'Телефон може перейти на іншу мережу — тоді відкрийте адресу вище.',wrong_password:'невірний пароль',not_found:'мережу не знайдено',failed:'помилка підключення',err:'Не вдається підключитися до',stay:'Пристрій лишається на своїй точці доступу — виправте і підключіть знову.',back:'Пристрій повернеться до',t:'Wi-Fi',st:'Мережа роутера',con:'Підключено до ',none:'Не підключено до роутера',nets:'Мережі',srch:'Пошук…',again:'Шукати ще раз',empty:'Мереж не знайдено',ssid:'Назва мережі (SSID)',pw:'Пароль',go:'Підключити зараз',name:'Вкажіть назву мережі',g1:'Підключаюсь до',g2:'Сторінка може перестати відповідати. Пристрій буде тут:',ap:'Через Wi-Fi пристрою',nw:'У новій мережі',found:'Пристрій у мережі',open:'Відкрити',lost:'Не вдалося знайти пристрій. Спробуйте адреси:',close:'Закрити'},
 ru:{ssid_empty:'Укажите имя сети',ssid_long:'Имя сети длиннее 32 байт',psk_length:'Пароль — 8–64 символа (или пустой для открытой сети)',ap_password_length:'8–63 символа (латиница, цифры, знаки) или пусто для открытой сети',gl:'Сохранить, подключить позже',lw:'Ожидает подключения:',lh:'Устройство остаётся в текущей сети, пока вы на его Wi-Fi. Подключится, когда последний телефон отключится от его Wi-Fi, или после перезагрузки.',lx:'Отменить',sap:'Вы на Wi-Fi устройства — продолжайте здесь. Адрес выше — для домашней сети.',tap:'Нажмите адрес, чтобы скопировать.',cop:'Скопировано',ph:'Телефон может перейти на другую сеть — тогда откройте адрес выше.',wrong_password:'неверный пароль',not_found:'сеть не найдена',failed:'ошибка подключения',err:'Не удаётся подключиться к',stay:'Устройство остаётся на своей точке доступа — исправьте и подключите снова.',back:'Устройство вернётся к',t:'Wi-Fi',st:'Сеть роутера',con:'Подключено к ',none:'Не подключено к роутеру',nets:'Сети',srch:'Поиск…',again:'Искать ещё раз',empty:'Сетей не найдено',ssid:'Имя сети (SSID)',pw:'Пароль',go:'Подключить сейчас',name:'Укажите имя сети',g1:'Подключаюсь к',g2:'Страница может перестать отвечать. Устройство будет здесь:',ap:'Через Wi-Fi устройства',nw:'В новой сети',found:'Устройство в сети',open:'Открыть',lost:'Не удалось найти устройство. Попробуйте адреса:',close:'Закрыть'}},X=T[L]||T.en;
 var host=document.createElement('div');host.style.cssText='position:fixed;z-index:2147483000;bottom:16px;'+(pos=='left'?'left':'right')+':16px';
-document.body.appendChild(host);var R=host.attachShadow({mode:'open'});
+(document.body||document.documentElement).appendChild(host);var R=host.attachShadow({mode:'open'});
 R.innerHTML='<style>:host{all:initial}*{box-sizing:border-box;font:15px/1.4 system-ui,-apple-system,Roboto,sans-serif}'+
 '.fab{width:52px;height:52px;border-radius:50%;border:0;background:'+acc+';color:#fff;box-shadow:0 6px 20px rgba(0,0,0,.3);cursor:pointer;display:grid;place-items:center}'+
-'.fab svg{width:26px;height:26px;fill:currentColor}.bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);align-items:flex-end;justify-content:center}'+
+'.fab svg{width:26px;height:26px;fill:currentColor}.bg{display:none;position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.45);align-items:flex-end;justify-content:center}'+
 '.bg.on{display:flex}.p{width:100%;max-width:440px;max-height:88vh;overflow:auto;background:#fff;color:#1b2230;border-radius:20px 20px 0 0;padding:18px}'+
 '.p{max-height:85vh;max-height:calc(100dvh - 12px);overscroll-behavior:contain;-webkit-overflow-scrolling:touch}@media(min-width:600px){.bg{align-items:center}.p{border-radius:20px}}@media(prefers-color-scheme:dark){.p{background:#151922;color:#f2f4f8}input{background:#0b0d12!important;color:#f2f4f8}}'+
 'h2{font-size:18px;font-weight:700;margin:0 0 12px;display:flex;justify-content:space-between;align-items:center}h3{font-size:14px;font-weight:700;margin:14px 0 6px;opacity:.8}h2 *,h3 *{font-weight:inherit;font-size:inherit}.x{cursor:pointer;opacity:.6;background:none;border:0;color:inherit;font-size:20px}'+
@@ -213,7 +214,7 @@ R.innerHTML='<style>:host{all:initial}*{box-sizing:border-box;font:15px/1.4 syst
 'button.b{width:100%;padding:12px;border-radius:12px;border:0;background:'+acc+';color:#fff;font-weight:700;cursor:pointer}button.s{width:100%;padding:10px;border-radius:12px;border:1px solid rgba(127,127,127,.35);background:none;color:inherit;font-weight:600;cursor:pointer;margin-top:8px}'+
 '.sp{display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin .8s linear infinite;vertical-align:-2px;margin-right:8px}@keyframes spin{to{transform:rotate(360deg)}}button:disabled{opacity:.7;cursor:default}'+
 'input.bad,input.bad:focus{border-color:#e5484d!important;box-shadow:0 0 0 1px #e5484d;outline:2px solid #e5484d}.err{color:#e5484d}#lt>div{margin-top:12px;padding:12px;border-radius:12px;background:rgba(127,127,127,.12)}#lt .row{display:flex;gap:8px}#lt .row button{margin-top:8px}'+
-'.tt{display:none;position:fixed;inset:0;z-index:3;align-items:center;justify-content:center;padding:16px;background:rgba(11,13,18,.82);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}'+
+'.tt{display:none;position:fixed;top:0;right:0;bottom:0;left:0;z-index:3;align-items:center;justify-content:center;padding:16px;background:rgba(11,13,18,.82);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}'+
 '.tc{width:100%;max-width:380px;background:#1b2230;color:#f2f4f8;border-radius:20px;padding:24px 20px;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,.45)}.tc b{display:block;font-size:17px;margin-bottom:6px}.tc div{margin-top:6px}.tc .m{opacity:.75}.tc .er{color:#ff8a8f}'+
 '.tc a{color:#9fc0ff;font-weight:600;text-decoration:none}.tc a.o{display:block;text-align:center;margin-top:14px;background:'+acc+';color:#fff;padding:12px;border-radius:12px}.tc button.s{border-color:rgba(255,255,255,.25)}'+
 '.sp.big{width:44px;height:44px;border-width:4px;margin:0 auto 16px;display:block;color:'+acc+'}'+
@@ -224,30 +225,31 @@ R.innerHTML='<style>:host{all:initial}*{box-sizing:border-box;font:15px/1.4 syst
 '<h3>'+X.st+'</h3><input id="ss" placeholder="'+X.ssid+'" autocapitalize="none" autocomplete="off"><div class="pw"><input id="pw" type="password" placeholder="'+X.pw+'" autocomplete="off"><button type="button" class="ey" aria-label="Show password"></button></div>'+
 '<button class="b" id="go">'+X.go+'</button><button class="s" id="gl">'+X.gl+'</button><div class="m" id="cm"></div><div id="lt"></div></div></div><div class="tt" id="tt"></div>';
 var $=function(s){return R.querySelector(s)},bg=$('.bg'),open=false;
-function esc(x){var d=document.createElement('div');d.textContent=x;return d.innerHTML}
+function esc(x){return String(x==null?'':x).replace(/[&<>"']/g,function(c){return'&#'+c.charCodeAt(0)+';'})}
 function bars(r){return r>-55?'▂▄▆█':r>-67?'▂▄▆':r>-78?'▂▄':'▂'}
-function addrs(a){return a.map(function(x){return '<div>'+(x.kind=='ap'?X.ap+' «'+esc(x.ssid)+'»: ':X.nw+': ')+'<a class="cp" href="'+x.url+'" data-copy="'+x.url+'">'+x.url+'</a> <a class="go" href="'+x.url+'" target="_blank" rel="noopener">↗</a></div>'}).join('')+'<div class="m">'+X.tap+'</div>'}
+function addrs(a){return a.map(function(x){return '<div>'+(x.kind=='ap'?X.ap+' «'+esc(x.ssid)+'»: ':X.nw+': ')+'<a class="cp" href="'+esc(x.url)+'" data-copy="'+esc(x.url)+'">'+esc(x.url)+'</a> <a class="go" href="'+esc(x.url)+'" target="_blank" rel="noopener">↗</a></div>'}).join('')+'<div class="m">'+X.tap+'</div>'}
 function copyText(t){try{if(navigator.clipboard&&window.isSecureContext){navigator.clipboard.writeText(t);return}}catch(e){}var a=document.createElement('textarea');a.value=t;a.setAttribute('readonly','');a.style.cssText='position:fixed;top:0;left:0;opacity:0';document.body.appendChild(a);a.select();a.setSelectionRange(0,t.length);try{document.execCommand('copy')}catch(e){}document.body.removeChild(a)}
 function onCopy(root,label){root.addEventListener('click',function(e){var a=e.target.closest&&e.target.closest('a.cp');if(!a)return;e.preventDefault();copyText(a.getAttribute('data-copy'));var o=a.textContent;a.textContent='\u2713 '+label;setTimeout(function(){a.textContent=o},1800)})}
 onCopy(R,X.cop);
-function toast(h,btn,wait){var e=$('#tt');e.innerHTML='<div class="tc">'+(wait?'<span class="sp big"></span>':'')+h+(btn?'<a class="o" href="'+btn+'">'+X.open+'</a>':'')+(wait?'':'<button class="s" id="tx">'+X.close+'</button>')+'</div>';
+function toast(h,btn,wait){var e=$('#tt');e.innerHTML='<div class="tc">'+(wait?'<span class="sp big"></span>':'')+h+(btn?'<a class="o" href="'+esc(btn)+'">'+X.open+'</a>':'')+(wait?'':'<button class="s" id="tx">'+X.close+'</button>')+'</div>';
  e.style.display='flex';var x=$('#tx');if(x)x.onclick=function(){e.style.display='none'}}
+var lt=0;function again(ms){clearTimeout(lt);lt=setTimeout(load,ms)}
 function load(){if(!open)return;apPortal.networks().then(function(j){
  later(j.later);$('#st').innerHTML=j.connected?'<span class="ok">'+esc(X.con+j.ssid+' · '+j.ip+' · '+j.rssi+' dBm')+'</span>':esc(X.none);
  var ls=$('#ls');ls.innerHTML='';if(!j.networks.length)ls.innerHTML='<li class="m">'+(j.scanning?X.srch:X.empty)+'</li>';
  j.networks.forEach(function(n){var li=document.createElement('li');li.innerHTML='<span>'+esc(n.ssid)+(n.lock?'<span class="lk">🔒</span>':'')+'</span><span class="m">'+bars(n.rssi)+'</span>';
   if(n.ssid==$('#ss').value)li.className='sel';li.onclick=function(){$('#ss').value=n.ssid;$('#pw').focus();load()};ls.appendChild(li)});
- if(j.scanning)setTimeout(load,1500)}).catch(function(){setTimeout(load,3000)})}
-function show(v){open=v;bg.classList.toggle('on',v);if(v){apPortal.scan().then(function(){setTimeout(load,800)});load()}}
+ if(j.scanning)again(1500)}).catch(function(){if(open)again(3000)})}
+function show(v){open=v;bg.classList.toggle('on',v);if(v){apPortal.scan().then(function(){again(800)},function(){});load()}else clearTimeout(lt)}
 $('.fab').onclick=function(){show(true)};$('.x').onclick=function(){show(false)};bg.onclick=function(e){if(e.target===bg)show(false)};
-$('#rf').onclick=function(){apPortal.scan().then(function(){setTimeout(load,800)})};
+$('#rf').onclick=function(){apPortal.scan().then(function(){again(800)},function(e){fail(e.code||String(e.message||e))})};
 var tick=null;function busy(on){var b=$('#go');b.disabled=on;b.innerHTML=(on?'<span class="sp"></span>':'')+esc(X.go);
  clearInterval(tick);if(on)tick=setInterval(function(){var e=$('#tc');if(e)e.textContent=Math.round((Date.now()-busy.t)/1000)+' s'},500)}
 function follow(p){busy.t=p.t;busy(true);toast('<b>'+X.g1+' «'+esc(p.ssid)+'»… <span id="tc"></span></b><div class="m">'+X.g2+'</div>'+addrs(p.addresses)+'<div class="m">'+X.ph+'</div>',null,true);
- apPortal.watch(p.ssid,{host:p.host,since:p.t}).finally(function(){busy(false)}).then(function(x){apPortal.pending.clear();
+ apPortal.watch(p.ssid,{host:p.host,since:p.t}).then(function(x){busy(false);return x},function(e){busy(false);throw e}).then(function(x){apPortal.pending.clear();
   if(x.onAp)toast('<b>'+X.found+' «'+esc(p.ssid)+'»</b>'+addrs([{kind:'new',url:x.url}])+'<div class="m">'+X.sap+'</div>');
-  else toast('<b>'+X.found+' «'+esc(p.ssid)+'»: '+x.ip+'</b>',x.url)})
- .catch(function(e){apPortal.pending.clear();if(e.code)toast('<b class="er">'+X.err+' «'+esc(p.ssid)+'»: '+(X[e.code]||e.code)+'</b><div class="m">'+(e.previous?X.back+' «'+esc(e.previous)+'».':X.stay)+'</div>');else toast('<b>'+X.lost+'</b>'+addrs(p.addresses))})}
+  else toast('<b>'+X.found+' «'+esc(p.ssid)+'»: '+esc(x.ip)+'</b>',x.url)})
+ .catch(function(e){apPortal.pending.clear();if(e.code)toast('<b class="er">'+X.err+' «'+esc(p.ssid)+'»: '+esc(X[e.code]||e.code)+'</b><div class="m">'+(e.previous?X.back+' «'+esc(e.previous)+'».':X.stay)+'</div>');else toast('<b>'+X.lost+'</b>'+addrs(p.addresses))})}
 function fail(code,field){var m=$('#cm');m.className='m err';m.textContent=X[code]||code;if(field){$(field).classList.add('bad');$(field).focus()}}
 function sta(){var m=$('#cm');m.className='m';m.textContent='';$('#ss').classList.remove('bad');$('#pw').classList.remove('bad');
  var s=$('#ss').value,c=apPortal.check.ssid(s);if(c){fail(c,'#ss');return null}c=apPortal.check.psk($('#pw').value);if(c){fail(c,'#pw');return null}return s}
@@ -256,10 +258,10 @@ $('#go').onclick=function(){var s=sta();if(!s)return;
  .catch(function(e){fail(e.code||String(e.message||e))})};
 function later(n){var e=$('#lt');if(!n){e.innerHTML='';return}
  e.innerHTML='<div><b>'+X.lw+' «'+esc(n)+'»</b><div class="m">'+X.lh+'</div><div class="row"><button class="b" id="la">'+X.go+'</button><button class="s" id="lc">'+X.lx+'</button></div></div>';
- $('#la').onclick=function(){apPortal.networks().then(function(s){return apPortal.apply().then(function(){var p={ssid:n,host:s.host,addresses:apPortal.addresses(s,n),t:Date.now()};apPortal.pending.save(p);e.innerHTML='';follow(p)})})};
- $('#lc').onclick=function(){apPortal.cancel().then(function(){e.innerHTML='';setTimeout(load,500)})}}
+ $('#la').onclick=function(){apPortal.networks().then(function(s){return apPortal.apply().then(function(){var p={ssid:n,host:s.host,addresses:apPortal.addresses(s,n),t:Date.now()};apPortal.pending.save(p);e.innerHTML='';follow(p)})}).catch(function(x){fail(x.code||String(x.message||x))})};
+ $('#lc').onclick=function(){apPortal.cancel().then(function(){e.innerHTML='';again(500)},function(x){fail(x.code||String(x.message||x))})}}
 $('#gl').onclick=function(){var s=sta();if(!s)return;
- apPortal.connect(s,$('#pw').value,{later:true}).then(function(){later(s);setTimeout(load,800)}).catch(function(e){fail(e.code||String(e.message||e))})};
+ apPortal.connect(s,$('#pw').value,{later:true}).then(function(){later(s);again(800)}).catch(function(e){fail(e.code||String(e.message||e))})};
 (function(){var p=apPortal.pending.load();if(p){show(true);follow(p)}})();
 function eyes(root){var o='<svg viewBox="0 0 24 24"><path d="M12 5C7 5 2.7 8.1 1 12c1.7 3.9 6 7 11 7s9.3-3.1 11-7c-1.7-3.9-6-7-11-7zm0 11.5a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9zm0-7a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z"/></svg>',c='<svg viewBox="0 0 24 24"><path d="M12 5C7 5 2.7 8.1 1 12c1.7 3.9 6 7 11 7s9.3-3.1 11-7c-1.7-3.9-6-7-11-7zm0 11.5a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9zm0-7a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z"/><path d="M3.3 2 22 20.7 20.7 22 2 3.3z"/></svg>';[].forEach.call(root.querySelectorAll('button.ey'),function(b){var i=b.previousElementSibling;b.innerHTML=o;b.onclick=function(){var h=i.type=='password';i.type=h?'text':'password';b.innerHTML=h?c:o;i.focus()}})}
 eyes(R);

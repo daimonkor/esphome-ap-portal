@@ -175,7 +175,7 @@ class PassTable {
   void grant(const Mac &mac, uint32_t ip, uint32_t now) {
     Slot *slot = nullptr;
     for (auto &s : this->slots_)
-      if (s.used && (s.mac == mac || s.ip == ip)) {
+      if (s.used && ((!mac.zero() && s.mac == mac) || s.ip == ip)) {
         slot = &s;
         break;
       }
@@ -215,6 +215,14 @@ class PassTable {
   void revoke(const Mac &mac) {
     for (auto &s : this->slots_)
       if (s.used && s.mac == mac)
+        s.used = false;
+  }
+
+  // Passes granted by IP alone (MAC never learned): dropped whenever a client leaves, since the
+  // address may go to the next client.
+  void revoke_unknown() {
+    for (auto &s : this->slots_)
+      if (s.used && s.mac.zero())
         s.used = false;
   }
 

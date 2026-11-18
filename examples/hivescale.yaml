@@ -16,6 +16,8 @@ wifi:
   ssid: my-router
   password: router-password
   power_save_mode: LIGHT
+  # Lives without a router for days: never reboot for the missing router (default 15 min).
+  reboot_timeout: 0s
   ap:
     ssid: HiveScale
     password: hivescale1

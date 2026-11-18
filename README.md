@@ -101,7 +101,8 @@ ap_portal:
   password_reset:               # with password_persist: back to the password from wifi: ap:
     power_cycles: 4             # RESET button (or power) 4 times in a row, each start under 10 s; 0 = off
     # pin: GPIO2                # a button held while running; default: the board's BOOT button
-    hold: 5s                    # (GPIO0 on ESP32/S2/S3, GPIO9 on C3/C6/H2); pin: false = off
+    hold: 5s                    # (GPIO0 on ESP32/S2/S3, GPIO9 on C3/C6, GPIO28 on C5); pin: false = off
+                                # own button to GND: pin: {number: GPIO2, mode: {input: true, pullup: true}, inverted: true}
   on_power_cycle:               # count — a quick start in a series (blink an LED)
   on_password_reset:            # source: "power_cycles" or "button"
   on_landing:                   # ip, path — the landing page was shown
@@ -166,7 +167,26 @@ By default only access point clients reach the API. `api: {from_home: true}` ope
 network too, behind `web_server`'s login if it has one. `wifi_page: {enabled: false}` keeps the API
 and drops the built-in page.
 
-### Keep the access point on router connections (experimental)
+### Keep the access point on router connections
+
+**ESPHome 2026.11 and newer — use ESPHome's own mode** (checked on hardware, no hacks):
+
+```yaml
+wifi:
+  post_connect_roaming: false   # required by always_on
+  reboot_timeout: 15min         # 0s for a device that lives without a router
+  ap:
+    ap_mode: always_on          # the access point stays up next to the router
+```
+
+ESPHome then raises the access point and keeps it on router connections; ap_portal leaves it alone
+(no own raise, ESPHome's `ap_timeout` untouched) and adds everything else. ESPHome reboots after
+`reboot_timeout` without a router only while nobody is on the access point. `ap_mode: WISP` is
+rejected (ap_portal's DNS would take the clients' internet away); `keep_ap_on_connect`, ap_portal's
+`ap_mode: fallback` and its `reboot_timeout` are rejected next to it.
+
+**ESPHome 2026.10 (or a fallback-only access point):**
+
 
 > [!CAUTION]
 > **Experimental.** ESPHome switches its access point off every time the router connects (phones on
@@ -185,9 +205,11 @@ ap_portal:
     off_when_idle: 60s       # router back and nobody on it this long: access point down
 ```
 
-With the flag hidden ESPHome's own "reboot without a router" is off too, so ap_portal does it:
-after `reboot_timeout` without a router and with **nobody** on the access point. A client on the
-access point stops the timer; it starts over when the last one leaves or the router comes back.
+Whenever ap_portal raises the access point itself (everything except `wifi: ap: ap_mode:
+always_on`), ESPHome's "reboot without a router" cannot see that access point, so ap_portal takes it
+over: after `reboot_timeout` (default: `wifi: reboot_timeout`, 15 min) without a router and with
+**nobody** on the access point. A client stops the timer; it starts over when the last one leaves
+or the router comes back. A device that lives without a router sets `wifi: reboot_timeout: 0s`.
 `ap_mode: fallback` implies `keep_ap_on_connect`.
 
 The first router connection after boot can still move the access point to the router's channel

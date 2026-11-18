@@ -36,6 +36,8 @@ AUTO_LOAD = ["web_server_base", "captive_portal", "network", "socket"]
 # The library leans on ESPHome internals (fallback AP, captive_portal quiet mode, handler order),
 # so it is tested against one ESPHome version. Others may work; the build says so.
 TESTED_ESPHOME = "2026.11"
+# Every release line the library was checked on (hardware): no warning on these.
+CHECKED_ESPHOME = ("2026.10", "2026.11")
 
 CONF_ACTIVE = "active"
 CONF_SSID_SUFFIX_MAC = "ssid_suffix_mac"
@@ -84,7 +86,7 @@ CONF_ON_PASSWORD_RESET = "on_password_reset"
 # The board's BOOT button: the strapping pin every ESP32 board wires to a button.
 BOOT_PINS = {
     "ESP32": 0, "ESP32S2": 0, "ESP32S3": 0,
-    "ESP32C2": 9, "ESP32C3": 9, "ESP32C6": 9, "ESP32C61": 9, "ESP32H2": 9,
+    "ESP32C2": 9, "ESP32C3": 9, "ESP32C5": 28, "ESP32C6": 9, "ESP32C61": 9,
 }
 CONF_ON_CLIENT_CONNECTED = "on_client_connected"
 CONF_ON_CLIENT_DISCONNECTED = "on_client_disconnected"
@@ -141,6 +143,23 @@ def _url_path(value):
     return value
 
 
+def _own_path(value):
+    """A page of ap_portal's own: not the device's root page, not under its API prefix."""
+    value = _url_path(value)
+    if value == "/":
+        raise cv.Invalid("'/' is the device's own page; use a path of its own, like /welcome")
+    if value.startswith("/ap_portal/"):
+        raise cv.Invalid("/ap_portal/ is reserved for ap_portal's endpoints")
+    return value
+
+
+def _pass_path(value):
+    value = _url_path(value)
+    if value == "/":
+        raise cv.Invalid("pass_paths: '/' would let every page through and switch the gate off")
+    return value
+
+
 def _hex_color(value):
     value = cv.string_strict(value).strip()
     h = value[1:] if value.startswith("#") else value
@@ -175,7 +194,7 @@ WIFI_PAGE_SCHEMA = cv.Schema(
         # the built-in Wi-Fi page: scan list, router network, access point password;
         # access point clients only. false = the device has its own Wi-Fi page.
         cv.Optional(CONF_ENABLED, default=True): cv.boolean,
-        cv.Optional(CONF_PATH, default="/wifi"): _url_path,
+        cv.Optional(CONF_PATH, default="/wifi"): _own_path,
         cv.Optional(CONF_AP_PASSWORD, default=True): cv.boolean,  # on/off, not a secret
         # ESPHome's own page (web_server) gets a Wi-Fi button in the corner for access point
         # clients: "/" is served as a frame around it. For a device without its own site.
@@ -215,7 +234,7 @@ TEXT_OR_FILE = cv.Any(
 LANDING_SCHEMA = cv.Schema(
     {
         cv.Optional(CONF_MODE, default="redirect"): cv.one_of(*MODES, lower=True),
-        cv.Optional(CONF_PATH, default="/welcome"): _url_path,
+        cv.Optional(CONF_PATH, default="/welcome"): _own_path,
         cv.Optional(CONF_HTML): TEXT_OR_FILE,
         cv.Optional(CONF_TITLE): cv.string_strict,
         cv.Optional(CONF_ACCENT_COLOR): _hex_color,
@@ -227,12 +246,12 @@ LANDING_SCHEMA = cv.Schema(
                 cv.Required(CONF_HREF): cv.string_strict,
             }
         ),
-        cv.Optional(CONF_ENTER_PATH): _url_path,
+        cv.Optional(CONF_ENTER_PATH): _own_path,
         cv.Optional(CONF_ENTER_WINDOW): cv.All(
             cv.positive_time_period_milliseconds,
             cv.Range(min=cv.TimePeriod(minutes=1), max=cv.TimePeriod(hours=24)),
         ),
-        cv.Optional(CONF_PASS_PATHS): cv.ensure_list(_url_path),
+        cv.Optional(CONF_PASS_PATHS): cv.ensure_list(_pass_path),
         # Own template variables: a string, or a lambda returning std::string (read in loop()
         # once a second, the page gets the latest value).
         cv.Optional(CONF_VARS, default={}): cv.Schema(
@@ -398,7 +417,40 @@ def _final_validate(config):
                 f"keep it to {32 - SUFFIX_LEN}."
             )
 
-    wifi_ap_mode = str(full.get("wifi", {}).get("ap", {}).get("ap_mode", "FALLBACK")).upper()
+    wifi_conf = full.get("wifi", {})
+    wifi_ap_mode = str(wifi_conf.get("ap", {}).get("ap_mode", "FALLBACK")).upper()
+    if wifi_ap_mode == "WISP":
+        raise cv.Invalid(
+            "wifi: ap: ap_mode: WISP gives the access point's clients the router's internet; ap_portal "
+            "answers every DNS name with the device itself, so they would get none. Use ALWAYS_ON."
+        )
+    if (config[CONF_KEEP_AP_ON_CONNECT] or config[CONF_AP_MODE] == "fallback") and wifi_conf.get(
+        "post_connect_roaming", False
+    ):
+        _LOGGER.warning(
+            "ap_portal: keep_ap_on_connect with wifi: post_connect_roaming: true — a roaming scan may "
+            "take the access point off its channel for a moment. Set post_connect_roaming: false "
+            "(ESPHome requires it for its own always-on access point)."
+        )
+    if config[CONF_WIFI_PAGE]["ui_button"] and "web_server" not in full:
+        raise cv.Invalid("wifi_page: ui_button: true puts a button on web_server's page; add web_server:")
+    reset = config[CONF_PASSWORD_RESET]
+    if config[CONF_PASSWORD_PERSIST] and reset.get(CONF_PIN) is None:
+        boot, used = _boot_pin(full, config)
+        if used:
+            _LOGGER.warning(
+                "ap_portal: GPIO%d (the BOOT button) is used elsewhere in this configuration, so "
+                "holding BOOT does not reset the access point password. Set password_reset: pin: "
+                "to another button, or pin: false to silence this.",
+                boot,
+            )
+    if not config[CONF_PASSWORD_PERSIST]:
+        unused = [k for k in (CONF_ON_POWER_CYCLE, CONF_ON_PASSWORD_RESET) if config.get(k)]
+        if unused:
+            _LOGGER.warning(
+                "ap_portal: %s never fire without password_persist: true (nothing to reset)",
+                ", ".join(unused),
+            )
     if wifi_ap_mode != "FALLBACK":
         # ESPHome 2026.11+ keeps the access point next to the router itself
         if config[CONF_KEEP_AP_ON_CONNECT]:
@@ -435,7 +487,7 @@ def _final_validate(config):
                 f"({attempts}), or safe mode starts first"
             )
 
-    if not ESPHOME_VERSION.startswith(TESTED_ESPHOME + "."):
+    if not any(ESPHOME_VERSION.startswith(v + ".") for v in CHECKED_ESPHOME):
         _LOGGER.warning(
             "ap_portal is tested with ESPHome %s.x; you have %s. It uses ESPHome Wi-Fi "
             "internals — check the access point and quiet mode after updating.",
@@ -445,7 +497,7 @@ def _final_validate(config):
         if config[CONF_KEEP_AP_ON_CONNECT] or config[CONF_AP_MODE] == "fallback":
             _LOGGER.warning(
                 "ap_portal: keep_ap_on_connect%s clears ESPHome's private WiFiComponent::has_ap_, "
-                "checked only on ESPHome %s.x. On %s check after flashing: the log shows "
+                "checked on ESPHome 2026.10.x-%s.x. On %s check after flashing: the log shows "
                 "'Access point kept on router connections', there is no 'Disabling AP' when the "
                 "router connects, and the device does not reboot without a router.",
                 " (implied by ap_mode: fallback)" if not config[CONF_KEEP_AP_ON_CONNECT] else "",
@@ -601,35 +653,55 @@ async def to_code(config):
         await automation.build_automation(trigger, [(cg.std_string, "source")], conf)
 
 
+# Keys whose plain value is a pin number (buses and drivers that take a bare pin, not a pin block).
+_PIN_KEYS = ("sda", "scl", "clk", "mosi", "miso", "din", "dout", "bclk", "lrclk", "mclk", "xclk")
+
+
+def _plain_pin(key, value):
+    if not isinstance(key, str) or isinstance(value, bool):
+        return None
+    k = key.lower()
+    if not (k in _PIN_KEYS or k == "pin" or k.endswith("_pin") or k.endswith("_pin_number")):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.upper().startswith("GPIO") and value[4:].isdigit():
+        return int(value[4:])
+    return None
+
+
 def _pin_numbers(node, skip):
-    """Every pin number in the configuration (pin blocks: a dict with 'number' and 'mode'/'inverted')."""
+    """Every pin number in the configuration: pin blocks (a dict with 'number' and 'mode'/'inverted')
+    and bare pin numbers (I2C sda/scl, camera clocks, *_pin keys)."""
     if node is skip:
         return
     if isinstance(node, dict):
         if "number" in node and ("mode" in node or "inverted" in node):
             yield node["number"]
-        for v in node.values():
-            yield from _pin_numbers(v, skip)
+        for k, v in node.items():
+            n = _plain_pin(k, v)
+            if n is not None:
+                yield n
+            else:
+                yield from _pin_numbers(v, skip)
     elif isinstance(node, (list, tuple)):
         for v in node:
             yield from _pin_numbers(v, skip)
 
 
-def _boot_pin_if_free(config):
+def _boot_pin(full, config):
+    """(BOOT pin of this chip, is it used elsewhere) — None when the chip has none."""
     from esphome.components import esp32
 
     boot = BOOT_PINS.get(esp32.get_esp32_variant())
     if boot is None:
-        return None
-    if boot in set(_pin_numbers(CORE.config, config)):
-        _LOGGER.warning(
-            "ap_portal: GPIO%d (the BOOT button) is used elsewhere in this configuration, so "
-            "holding BOOT does not reset the access point password. Set password_reset: pin: "
-            "to another button, or pin: false to silence this.",
-            boot,
-        )
-        return None
-    return boot
+        return None, False
+    return boot, boot in set(_pin_numbers(full, config))
+
+
+def _boot_pin_if_free(config):
+    boot, used = _boot_pin(CORE.config, config)
+    return None if used else boot
 
 
 # ───────────────────────────── sockets ─────────────────────────────

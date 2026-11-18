@@ -426,6 +426,25 @@ static void test_reboot_timer() {
   CHECK(w.update(false, 0, 120000));
 }
 
+static void test_passes_unknown_mac() {
+  using ap_portal_core::Mac;
+  using ap_portal_core::PassTable;
+  PassTable t(60000);
+  Mac zero{};
+  Mac a{};
+  a.b[5] = 1;
+  t.grant(zero, 0x0A00000A, 1000);  // static IP .10, MAC unknown
+  t.grant(zero, 0x0B00000A, 1000);  // another one, .11: its own pass, not .10's
+  CHECK(t.check(0x0A00000A, 2000));
+  CHECK(t.check(0x0B00000A, 2000));
+  t.grant(a, 0x0C00000A, 1000);
+  t.revoke(a);                      // a known client leaves
+  t.revoke_unknown();               // IP-only passes go with any leave
+  CHECK(!t.check(0x0A00000A, 3000));
+  CHECK(!t.check(0x0B00000A, 3000));
+  CHECK(!t.check(0x0C00000A, 3000));
+}
+
 static void test_fallback_ap() {
   FallbackAp f(30000, 60000);
   CHECK(!f.update(true, 0, 1000));      // router: no access point
@@ -461,6 +480,7 @@ int main() {
   test_wrap();
   test_sta_errors();
   test_fallback_ap();
+  test_passes_unknown_mac();
   test_reboot_timer();
   std::printf("%d checks, %d failed\n", g_checks, g_fail);
   return g_fail ? EXIT_FAILURE : EXIT_SUCCESS;

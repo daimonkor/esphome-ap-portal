@@ -141,7 +141,10 @@ void ApPortal::setup() {
     auto ap = w->get_ap();
     uint8_t mac[6];
     get_mac_address_raw(mac);
-    const std::string ssid = ap_portal_core::ssid_with_suffix(std::string(ap.get_ssid()), mac);
+    std::string base(ap.get_ssid());
+    if (base.empty())
+      base = App.get_name();  // ESPHome fills the SSID with the device name only when it starts the AP
+    const std::string ssid = ap_portal_core::ssid_with_suffix(base, mac);
     ap.set_ssid(ssid);
     w->set_ap(ap);
   }
@@ -195,6 +198,12 @@ void ApPortal::loop() {
   // The default event loop exists only after `network` set up; registering earlier fails silently.
   if (!this->events_registered_)
     this->register_events_();
+  if (!this->web_started_ && this->events_registered_ && web_server_base::global_web_server_base != nullptr) {
+    // Without web_server: in the YAML only captive_portal starts the listener, and only in quiet mode.
+    // One reference of our own keeps it running (init/deinit are reference counted).
+    web_server_base::global_web_server_base->init();
+    this->web_started_ = true;
+  }
   this->drain_events_();
 
   if (this->password_pending_ && ap_portal_core::reached(now, this->password_apply_at_)) {
@@ -229,6 +238,8 @@ void ApPortal::loop() {
       this->on_portal_stop_.call();
     }
   }
+  const bool router = w->is_connected();
+  this->reboot_tick_(router, now);
   if (!this->running_)
     return;
   this->refresh_lambda_vars_(now);
@@ -238,12 +249,10 @@ void ApPortal::loop() {
     // access point off on a router connection; with the flag also goes its "no reboot while an
     // access point exists" rule, so reboot_timeout is switched off the same way.
     w->*has_ap_member(HasApTag{}) = false;
-    w->set_reboot_timeout(0);
     this->has_ap_hidden_ = true;
     ESP_LOGI(TAG, "Access point kept on router connections (keep_ap_on_connect)");
   }
 
-  const bool router = w->is_connected();
   if (router) {
     // One radio: connected, the access point serves on the router's channel. Remember it — after
     // the router is lost the radio wanders through ESPHome's scans and its current channel means
@@ -254,23 +263,6 @@ void ApPortal::loop() {
     wifi_ap_record_t info{};
     if (esp_wifi_sta_get_ap_info(&info) == ESP_OK && info.primary != 0)
       this->ap_channel_ = info.primary;
-  }
-  if (this->has_ap_hidden_) {
-    const uint32_t clients = this->client_count();
-    if (this->reboot_timer_.update(router, clients, now)) {
-      ESP_LOGW(TAG, "No router for %" PRIu32 " s and nobody on the access point: rebooting",
-               this->reboot_timer_.timeout() / 1000);
-      App.safe_reboot();
-    }
-    const bool counting = this->reboot_timer_.running();
-    if (counting != this->reboot_logged_) {
-      this->reboot_logged_ = counting;
-      if (counting)
-        ESP_LOGI(TAG, "No router: reboot in %" PRIu32 " s unless it returns or someone joins the access point",
-                 this->reboot_timer_.timeout() / 1000);
-      else
-        ESP_LOGD(TAG, "Reboot timer stopped (%s)", router ? "router back" : "client on the access point");
-    }
   }
   if (this->ap_fallback_) {
     const bool want = this->fallback_ap_.update(router, this->client_count(), now);
@@ -407,6 +399,7 @@ void ApPortal::drain_events_() {
       {
         std::lock_guard<std::mutex> g(this->mu_);
         this->passes_.revoke(m);
+        this->passes_.revoke_unknown();  // passes granted by IP alone: that address may be someone else's next
         this->clients_.remove(m);
       }
       this->on_client_disconnected_.call(mac_str(ev.mac));
@@ -446,6 +439,13 @@ bool ApPortal::ap_up_() const {
 // Wi-Fi restarts. Raise it again from loop() at a quiet moment — never from the event handler,
 // never while Wi-Fi is disabled or ESPHome is in a roaming scan.
 void ApPortal::keep_ap_(uint32_t now) {
+#ifdef USE_WIFI_AP_PERSISTENT
+  // wifi: ap: ap_mode: always_on — ESPHome raises and retries its access point itself; one raised
+  // by us behind its back would be raised again by ESPHome (clients dropped twice).
+  wifi_mode_t pm;
+  this->ap_was_up_ = esp_wifi_get_mode(&pm) == ESP_OK && (pm == WIFI_MODE_APSTA || pm == WIFI_MODE_AP);
+  return;
+#endif
   auto *w = wifi::global_wifi_component;
   if (w->is_disabled())
     return;
@@ -514,9 +514,13 @@ void ApPortal::stop_ap_() {
     this->passes_.clear();
     this->clients_.clear();
   }
+#ifndef USE_WIFI_AP_PERSISTENT
+  // With wifi: ap: ap_mode: always_on the access point is ESPHome's: `active` off ends our portal
+  // (landing, DNS, gate), the access point itself stays.
   wifi_mode_t m;
   if (esp_wifi_get_mode(&m) == ESP_OK && m == WIFI_MODE_APSTA)
     esp_wifi_set_mode(WIFI_MODE_STA);
+#endif
   this->ap_was_up_ = false;
   this->dhcp_done_ = false;
 }
@@ -558,12 +562,34 @@ void ApPortal::configure_dhcp_() {
            DHCP_FIRST, DHCP_LAST, esp_err_to_name(e));
 }
 
-uint32_t ApPortal::ap_ip_be_() const {
+uint32_t ApPortal::ap_ip_be_(uint32_t *mask) const {
   esp_netif_t *apn = ap_netif();
   esp_netif_ip_info_t info{};
   if (apn == nullptr || esp_netif_get_ip_info(apn, &info) != ESP_OK)
     return 0;
+  if (mask != nullptr)
+    *mask = info.netmask.addr;
   return info.ip.addr;
+}
+
+// The DHCP server's lease for this address, for a client whose IP event never reached us.
+static bool mac_from_dhcp(uint32_t ip, ap_portal_core::Mac &out) {
+  esp_netif_t *apn = ap_netif();
+  wifi_sta_list_t list{};
+  if (apn == nullptr || esp_wifi_ap_get_sta_list(&list) != ESP_OK || list.num <= 0)
+    return false;
+  esp_netif_pair_mac_ip_t pairs[ESP_WIFI_MAX_CONN_NUM]{};
+  const int n = std::min<int>(list.num, ESP_WIFI_MAX_CONN_NUM);
+  for (int i = 0; i < n; i++)
+    std::memcpy(pairs[i].mac, list.sta[i].mac, 6);
+  if (esp_netif_dhcps_get_clients_by_mac(apn, n, pairs) != ESP_OK)
+    return false;
+  for (int i = 0; i < n; i++)
+    if (pairs[i].ip.addr == ip) {
+      std::memcpy(out.b, pairs[i].mac, 6);
+      return true;
+    }
+  return false;
 }
 
 // ───────────────────────────── dns ─────────────────────────────
@@ -615,6 +641,34 @@ void ApPortal::dns_close_() {
   this->dns_bound_ip_ = 0;
 }
 
+// ───────────────────────────── reboot without a router ─────────────────────────────
+// ESPHome's own reboot_timeout knows only the access point it started itself: with ours (raised by
+// ap_portal) it either never reboots (2026.10: "has an access point") or reboots with clients on it
+// (2026.11 counts only its own). So ap_portal takes it over — same timeout, paused while anyone is
+// on the access point — unless ESPHome keeps the access point itself (wifi: ap: ap_mode: always_on).
+void ApPortal::reboot_tick_(bool router, uint32_t now) {
+#ifndef USE_WIFI_AP_PERSISTENT
+  if (!this->reboot_taken_) {
+    wifi::global_wifi_component->set_reboot_timeout(0);
+    this->reboot_taken_ = true;
+  }
+  if (this->reboot_timer_.update(router, this->client_count(), now)) {
+    ESP_LOGW(TAG, "No router for %" PRIu32 " s and nobody on the access point: rebooting",
+             this->reboot_timer_.timeout() / 1000);
+    App.safe_reboot();
+  }
+  const bool counting = this->reboot_timer_.running();
+  if (counting != this->reboot_logged_) {
+    this->reboot_logged_ = counting;
+    if (counting)
+      ESP_LOGI(TAG, "No router: reboot in %" PRIu32 " s unless it returns or someone joins the access point",
+               this->reboot_timer_.timeout() / 1000);
+    else
+      ESP_LOGD(TAG, "Reboot timer stopped (%s)", router ? "router back" : "client on the access point");
+  }
+#endif
+}
+
 // ───────────────────────────── quiet mode ─────────────────────────────
 
 void ApPortal::quiet_tick_(uint32_t now, bool router) {
@@ -659,7 +713,8 @@ void ApPortal::quiet_tick_(uint32_t now, bool router) {
   const uint8_t ch = this->ap_channel_;
   // While switching the router network the new one may be on another channel: quiet mode stays
   // (no scans, no adapter restarts — the access point keeps running), the channel lock does not.
-  const bool quiet = this->quiet_ours_ && cp->is_active() && !this->switch_pending_;
+  // A portal ESPHome started itself (2026.11 always_on: "portal follows the station") counts too.
+  const bool quiet = (this->quiet_ours_ || !router) && cp->is_active() && !this->switch_pending_;
   switch (this->lock_.update(ap_portal_core::lock_wanted(quiet, ch), ch, now)) {
     case ap_portal_core::ChannelLock::Action::LOCK:
       this->lock_apply_(this->lock_.channel());
@@ -724,6 +779,7 @@ void ApPortal::switch_start_(const std::string &ssid, const std::string &psk, ui
   }
   ESP_LOGI(TAG, "Wi-Fi page: switching to the router network '%s' (fallback '%s' in %u s)", ssid.c_str(),
            this->switch_old_ssid_.c_str(), (unsigned) (this->fb_timeout_ / 1000));
+  this->fb_stage_ = 0;  // the switch has its own revert; the boot-time router check must not override it
   {
     std::lock_guard<std::mutex> g(this->mu_);
     this->switch_reverted_ = false;
@@ -1041,12 +1097,17 @@ ApPortal::Classified ApPortal::classify_(AsyncWebServerRequest *request) {
   const int fd = httpd_req_to_sockfd(*request);
   sockaddr_storage local{}, peer{};
   socklen_t ll = sizeof(local), pl = sizeof(peer);
-  const uint32_t ap_ip = this->ap_ip_be_();
-  if (fd >= 0 && ::getsockname(fd, reinterpret_cast<sockaddr *>(&local), &ll) == 0)
-    r.from_ap = ap_ip != 0 && v4_of(local) == ap_ip;
-  c.from_ap = r.from_ap;
+  uint32_t ap_mask = 0;
+  const uint32_t ap_ip = this->ap_ip_be_(&ap_mask);
+  // A client of the access point is one whose own address is in the access point's subnet — not
+  // whoever reached the access point's address (a home host can route to it through the device),
+  // and an access point client that reached the router-side address is still a client of ours.
+  (void) local;
+  (void) ll;
   if (fd >= 0 && ::getpeername(fd, reinterpret_cast<sockaddr *>(&peer), &pl) == 0)
     c.client_ip = v4_of(peer);
+  r.from_ap = ap_ip != 0 && ap_mask != 0 && c.client_ip != 0 && ((c.client_ip ^ ap_ip) & ap_mask) == 0;
+  c.from_ap = r.from_ap;
 
   if (r.from_ap && this->route_.mode == ap_portal_core::Mode::GATE) {
     std::lock_guard<std::mutex> g(this->mu_);
@@ -1099,7 +1160,8 @@ void ApPortal::handleRequest(AsyncWebServerRequest *request) {
       {
         std::lock_guard<std::mutex> g(this->mu_);
         ap_portal_core::Mac m;
-        this->clients_.find(c.client_ip, m);  // unknown MAC (static IP): the pass goes by IP alone
+        if (!this->clients_.find(c.client_ip, m))
+          mac_from_dhcp(c.client_ip, m);  // the IP event was missed; still unknown = static IP, by IP alone
         this->passes_.grant(m, c.client_ip, millis());
         std::memcpy(ev.mac, m.b, 6);
       }
@@ -1521,6 +1583,8 @@ void ApPortal::apply_password_(const std::string &password, bool save) {
   auto ap = w->get_ap();
   ap.set_password(password);
   w->set_ap(ap);
+  if (this->has_ap_hidden_)
+    w->*has_ap_member(HasApTag{}) = false;  // set_ap() raises ESPHome's flag again
   this->custom_password_ = password != this->firmware_password_;
   if (save && this->password_persist_) {
     PasswordRecord rec{};

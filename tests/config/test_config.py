@@ -13,6 +13,23 @@ import pytest
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 EXAMPLES = sorted((ROOT / "examples").glob("*.yaml"))
 
+
+def _esphome_version():
+    out = subprocess.run(["esphome", "version"], capture_output=True, text=True).stdout
+    parts = out.strip().split()[-1].split(".")
+    return tuple(int(p) for p in parts[:2])
+
+
+ESPHOME_VER = _esphome_version()
+TESTED = tuple(
+    int(p)
+    for p in next(
+        l for l in (ROOT / "components/ap_portal/__init__.py").read_text().splitlines() if l.startswith("TESTED_ESPHOME")
+    ).split('"')[1].split(".")
+)
+on_tested = pytest.mark.skipif(ESPHOME_VER != TESTED, reason="needs the tested ESPHome version")
+needs_2026_11 = pytest.mark.skipif(ESPHOME_VER < (2026, 11), reason="wifi: ap: ap_mode exists from ESPHome 2026.11")
+
 ESP = """
 esp32:
   board: esp32-c3-devkitm-1
@@ -229,12 +246,14 @@ def test_warn(tmp_path, name):
     assert needle in out, out[-2000:]
 
 
+@on_tested
 def test_good_config_has_no_ap_portal_warning(tmp_path):
     r, out = run(tmp_path, head() + "ap_portal:\n")
     assert r.returncode == 0, out[-2000:]
     assert "ap_portal:" not in "\n".join(l for l in out.splitlines() if "WARNING" in l), out[-2000:]
 
 
+@on_tested
 def test_keep_ap_options_valid_without_warning_on_tested_esphome(tmp_path):
     for opts in ("  keep_ap_on_connect: true\n", "  ap_mode: fallback\n  fallback: {after: 20s, off_when_idle: 2min}\n"):
         r, out = run(tmp_path, head() + "ap_portal:\n" + opts)
@@ -255,11 +274,13 @@ def _always_on_head():
     return head(ap_extra=ALWAYS_ON) + "  post_connect_roaming: false\n"
 
 
+@needs_2026_11
 def test_wifi_ap_always_on_is_valid(tmp_path):
     r, out = run(tmp_path, _always_on_head() + "ap_portal:\n")
     assert r.returncode == 0, out[-2000:]
 
 
+@needs_2026_11
 @pytest.mark.parametrize(
     "opts,needle",
     [
@@ -272,3 +293,40 @@ def test_wifi_ap_always_on_conflicts(tmp_path, opts, needle):
     r, out = run(tmp_path, _always_on_head() + "ap_portal:\n" + opts)
     assert r.returncode != 0
     assert needle in out, out[-2000:]
+
+
+C3 = """esp32:
+  board: esp32-c3-devkitm-1
+  framework:
+    type: esp-idf"""
+
+
+def test_boot_pin_used_by_i2c_warns(tmp_path):
+    text = head(esp=C3) + "i2c:\n  sda: GPIO8\n  scl: GPIO9\nap_portal:\n  password_persist: true\n"
+    r, out = run(tmp_path, text)
+    assert r.returncode == 0, out[-2000:]
+    assert "GPIO9 (the BOOT button) is used elsewhere" in out, out[-2000:]
+
+
+@pytest.mark.parametrize(
+    "opts,needle",
+    [
+        ("  landing:\n    path: /\n", "is the device's own page"),
+        ("  wifi_page:\n    path: /\n", "is the device's own page"),
+        ("  landing:\n    path: /ap_portal/x\n", "reserved"),
+        ("  landing:\n    mode: gate\n    pass_paths: [/]\n", "switch the gate off"),
+        ("  wifi_page:\n    ui_button: true\n", "add web_server"),
+    ],
+)
+def test_bad_paths_and_ui_button(tmp_path, opts, needle):
+    r, out = run(tmp_path, head() + "ap_portal:\n" + opts)
+    assert r.returncode != 0
+    assert needle in out, out[-2000:]
+
+
+@needs_2026_11
+def test_wifi_ap_wisp_rejected(tmp_path):
+    h = head(ap_extra=AP_GOOD + "    ap_mode: wisp\n")
+    r, out = run(tmp_path, h + "ap_portal:\n")
+    assert r.returncode != 0
+    assert "WISP" in out, out[-2000:]

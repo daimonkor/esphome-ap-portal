@@ -154,7 +154,7 @@ class ApPortal : public Component, public AsyncWebHandler {
   void quiet_tick_(uint32_t now, bool router);
   void lock_apply_(uint8_t channel);
   void lock_release_();
-  uint32_t ap_ip_be_() const;
+  uint32_t ap_ip_be_(uint32_t *mask = nullptr) const;
 
   // HTTP
   struct Classified {
@@ -282,10 +282,13 @@ class ApPortal : public Component, public AsyncWebHandler {
   bool keep_ap_on_connect_{false};
   bool has_ap_hidden_{false};
   bool ap_fallback_{false};
-  bool fallback_was_{true};
+  bool fallback_was_{false};
   ap_portal_core::FallbackAp fallback_ap_;
   ap_portal_core::RebootTimer reboot_timer_;
   bool reboot_logged_{false};
+  bool reboot_taken_{false};
+  bool web_started_{false};
+  void reboot_tick_(bool router, uint32_t now);
   // router fallback (loop() only)
   bool fb_enabled_{true}, fb_previous_{true}, fb_firmware_{true};
   uint32_t fb_timeout_{45000};

@@ -4,6 +4,43 @@ Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monito
 
 ## Unreleased
 
+### Security
+- Addresses and error codes from `/ap_portal/networks` (also the one at `<host>.local`, which any
+  device on the network can answer) and from the saved pending switch are escaped and checked
+  (IPv4 only) before they reach the page; `esc()` escapes quotes for attributes.
+- An access point client is told by its own address (inside the access point subnet), no longer by
+  the local address it reached: a home host routing to the access point address no longer gets the
+  access point API, an access point client reaching the router-side address no longer skips the gate.
+- Gate passes of clients whose MAC was never learned: looked up in the DHCP leases; still unknown
+  ones are dropped whenever a client leaves (the address may go to the next one) and no longer share
+  one slot.
+
+### Fixed
+- Changing the access point password (page, action, BOOT) made ESPHome switch the access point off
+  again on the next router connection with `keep_ap_on_connect` (`set_ap()` restores ESPHome's flag).
+- Reboot without a router: with an access point raised by ap_portal, ESPHome 2026.11 rebooted even
+  with clients on it and 2026.10 never rebooted. ap_portal now owns it (same `wifi: reboot_timeout`,
+  paused while anyone is on the access point), also while the portal is inactive; with
+  `wifi: ap: ap_mode: always_on` ESPHome keeps it. **Devices without a router: `reboot_timeout: 0s`.**
+- Without `web_server:` the HTTP listener ran only in quiet mode; ap_portal now keeps it running.
+- `always_on`: ap_portal no longer raises the access point behind ESPHome or switches it off when
+  `active` goes false (only the portal stops); the channel lock also applies when ESPHome started
+  the captive portal itself.
+- A switch from the Wi-Fi page during the after-boot router check could be overridden by that check.
+- `ssid_suffix_mac` without `wifi: ap: ssid` gave an SSID of the suffix alone.
+- BOOT pin detection missed bare pin numbers (I2C `sda`/`scl`, camera clocks, `*_pin`); the warning
+  now comes at validation, not only at compile. ESP32-C5: GPIO28.
+- The page's PSK check counted characters, the device counts bytes.
+- JS: no lost errors on scan/apply/cancel, one polling chain at a time, no `AbortController`,
+  `Promise.finally` or CSS `inset` needed (older captive WebViews), popup.js may sit in `<head>`.
+
+### Added
+- `wifi: ap: ap_mode: always_on` (ESPHome 2026.11) supported; WISP and conflicting options rejected.
+- Rejected: `/` or `/ap_portal/…` as landing/enter/Wi-Fi page path, `/` in `pass_paths`,
+  `ui_button` without `web_server`. Warned: `on_power_cycle`/`on_password_reset` without
+  `password_persist`, keep_ap with `post_connect_roaming: true`.
+- No version warning on ESPHome 2026.10.x and 2026.11.x (both checked on hardware).
+
 ### Changed
 - Tested with ESPHome 2026.11.x (was 2026.10.x); CI on 2026.11.0. `keep_ap_on_connect` and its
   `reboot_timeout` checked on hardware (XIAO ESP32-S3) on both 2026.10.2 and 2026.11.0.
