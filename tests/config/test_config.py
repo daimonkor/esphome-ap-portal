@@ -75,6 +75,26 @@ GOOD = {
             enter_window: 10min
             pass_paths: [/history.bin, /events]
         """),
+    "html_template_vars": textwrap.dedent("""\
+        ap_portal:
+          landing:
+            mode: page
+            accent_color: '#ff0000'
+            html: "<h1>{{title}}</h1>{{#if sta_ip}}{{sta_ip}}{{/if}}{{battery}} {{fw}}"
+            vars:
+              battery: !lambda return std::string("87");
+              fw: "1.2.3"
+          on_landing:
+            - logger.log: {format: "%s %s", args: [ip.c_str(), path.c_str()]}
+        """),
+    "html_static_gz": "ap_portal:\n  landing: {mode: page, html: '<p>static page</p>'}\n",
+    "gate_enter_hook": textwrap.dedent("""\
+        ap_portal:
+          landing:
+            mode: gate
+          on_enter:
+            - logger.log: {format: "%s %s", args: [mac.c_str(), ip.c_str()]}
+        """),
     "suffix_fits": "ap_portal:\n  ssid_suffix_mac: true\n",
     "actions": textwrap.dedent("""\
         ap_portal:
@@ -114,12 +134,8 @@ BAD = {
     ),
     # SSID too long with the MAC suffix: 26 + 7 > 32
     "ssid_suffix_too_long": (head(ap_ssid="A" * 26), "ap_portal:\n  ssid_suffix_mac: true\n", "longer than 32"),
-    # custom HTML together with styling keys
-    "html_with_style": (
-        head(),
-        "ap_portal:\n  landing:\n    html: '<p>x</p>'\n    accent_color: '#ff0000'\n",
-        "is your whole page",
-    ),
+    "var_builtin_name": (head(), "ap_portal:\n  landing: {vars: {ssid: x}}\n", "built-in variable"),
+    "var_bad_name": (head(), "ap_portal:\n  landing: {vars: {Bad-Name: x}}\n", "variable name"),
     # gate-only keys outside gate mode
     "pass_paths_not_gate": (head(), "ap_portal:\n  landing: {pass_paths: [/x]}\n", "only work with mode: gate"),
     "enter_path_not_gate": (head(), "ap_portal:\n  landing: {mode: page, enter_path: /e}\n", "only work with mode: gate"),

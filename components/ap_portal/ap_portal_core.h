@@ -368,4 +368,146 @@ inline bool valid_ap_password(const std::string &p) {
   return true;
 }
 
+// ───────────────────────────── templates ─────────────────────────────
+// The landing page is a template, the built-in page and your own `html` alike:
+//   {{name}}                 the variable, HTML-escaped
+//   {{{name}}}               the variable as is (an SVG icon, a prepared fragment)
+//   {{#if name}}…{{else}}…{{/if}}, {{#unless name}}…{{/unless}}   nested blocks
+// A variable is true when it is not empty, "0" or "false". Unknown variables are empty.
+// Unclosed tags are copied as text, so a stray "{{" never eats the page.
+using Vars = std::vector<std::pair<std::string, std::string>>;
+
+inline const std::string *find_var(const Vars &vars, const std::string &name) {
+  for (const auto &kv : vars)
+    if (kv.first == name)
+      return &kv.second;
+  return nullptr;
+}
+
+inline bool truthy(const std::string *v) { return v != nullptr && !v->empty() && *v != "0" && *v != "false"; }
+
+inline void html_escape_into(std::string &out, const std::string &s) {
+  for (char c : s) {
+    switch (c) {
+      case '&': out += "&amp;"; break;
+      case '<': out += "&lt;"; break;
+      case '>': out += "&gt;"; break;
+      case '"': out += "&quot;"; break;
+      case '\'': out += "&#39;"; break;
+      default: out += c;
+    }
+  }
+}
+
+inline std::string trim(const std::string &s) {
+  size_t a = 0, b = s.size();
+  while (a < b && (s[a] == ' ' || s[a] == '\t' || s[a] == '\n' || s[a] == '\r')) a++;
+  while (b > a && (s[b - 1] == ' ' || s[b - 1] == '\t' || s[b - 1] == '\n' || s[b - 1] == '\r')) b--;
+  return s.substr(a, b - a);
+}
+
+inline bool has_template_tags(const std::string &tpl) { return tpl.find("{{") != std::string::npos; }
+
+inline std::string render(const std::string &tpl, const Vars &vars) {
+  struct Block {
+    bool parent;  // the enclosing block is shown
+    bool cond;
+    bool in_else;
+    bool shown() const { return parent && (in_else ? !cond : cond); }
+  };
+  std::vector<Block> stack;
+  auto shown = [&]() { return stack.empty() || stack.back().shown(); };
+  std::string out;
+  out.reserve(tpl.size() + 64);
+  size_t i = 0;
+  while (i < tpl.size()) {
+    const size_t open = tpl.find("{{", i);
+    if (open == std::string::npos) {
+      if (shown()) out.append(tpl, i, std::string::npos);
+      break;
+    }
+    if (shown()) out.append(tpl, i, open - i);
+    const bool raw = tpl.compare(open, 3, "{{{") == 0;
+    const char *close_tok = raw ? "}}}" : "}}";
+    const size_t start = open + (raw ? 3 : 2);
+    const size_t close = tpl.find(close_tok, start);
+    if (close == std::string::npos) {  // unclosed: the rest is text
+      if (shown()) out.append(tpl, open, std::string::npos);
+      break;
+    }
+    const std::string tag = trim(tpl.substr(start, close - start));
+    i = close + (raw ? 3 : 2);
+    if (!raw && (tag.compare(0, 4, "#if ") == 0 || tag.compare(0, 8, "#unless ") == 0)) {
+      const bool unless = tag[1] == 'u';
+      const bool t = truthy(find_var(vars, trim(tag.substr(unless ? 8 : 4))));
+      stack.push_back({shown(), unless ? !t : t, false});
+    } else if (!raw && tag == "else") {
+      if (!stack.empty()) stack.back().in_else = true;
+    } else if (!raw && (tag == "/if" || tag == "/unless")) {
+      if (!stack.empty()) stack.pop_back();
+    } else if (shown()) {
+      const std::string *v = find_var(vars, tag);
+      if (v != nullptr) {
+        if (raw) out += *v;
+        else html_escape_into(out, *v);
+      }
+    }
+  }
+  return out;
+}
+
+// ───────────────────────────── HTTP claim ─────────────────────────────
+// Our handler stands first. It answers its own routes; everything else goes on to web_server.
+// While captive_portal runs (quiet mode) its handler would take every GET nobody else wants —
+// the Wi-Fi form, /wifisave — so then we take every GET and hand it to the next handler that is
+// not captive_portal, or answer 404 ourselves.
+enum class Claim : uint8_t { NONE, OURS, FORWARD };
+
+inline Claim claim(Route r, bool get, bool captive_active) {
+  if (r != Route::PASS) return Claim::OURS;
+  if (get && captive_active) return Claim::FORWARD;
+  return Claim::NONE;
+}
+
+// ───────────────────────────── clients (IP -> MAC) ─────────────────────────────
+// From IP_EVENT_AP_STAIPASSIGNED: the gate needs the MAC of the client that pressed the button,
+// HTTP only knows its IP.
+class ClientTable {
+ public:
+  static constexpr size_t CAPACITY = 8;
+  void set(uint32_t ip, const Mac &mac) {
+    Slot *slot = nullptr;
+    for (auto &s : this->slots_)
+      if (s.used && (s.ip == ip || s.mac == mac)) { slot = &s; break; }
+    if (slot == nullptr)
+      for (auto &s : this->slots_)
+        if (!s.used) { slot = &s; break; }
+    if (slot == nullptr) slot = &this->slots_[this->next_++ % CAPACITY];
+    slot->used = true;
+    slot->ip = ip;
+    slot->mac = mac;
+  }
+  bool find(uint32_t ip, Mac &mac) const {
+    for (const auto &s : this->slots_)
+      if (s.used && s.ip == ip) { mac = s.mac; return true; }
+    return false;
+  }
+  void remove(const Mac &mac) {
+    for (auto &s : this->slots_)
+      if (s.used && s.mac == mac) s.used = false;
+  }
+  void clear() {
+    for (auto &s : this->slots_) s.used = false;
+  }
+
+ protected:
+  struct Slot {
+    bool used{false};
+    uint32_t ip{0};
+    Mac mac;
+  };
+  Slot slots_[CAPACITY];
+  size_t next_{0};
+};
+
 }  // namespace ap_portal_core

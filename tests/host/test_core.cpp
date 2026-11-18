@@ -257,6 +257,52 @@ static void test_strings() {
   CHECK(!valid_ap_password("pass\nword"));
 }
 
+// ------------------------------------------------------------------ templates
+static void test_templates() {
+  const Vars v = {{"title", "Deye <Battery>"}, {"sta_ip", "10.1.30.117"}, {"empty", ""}, {"zero", "0"},
+                  {"icon", "<svg/>"}};
+  CHECK(render("<h1>{{title}}</h1>", v) == "<h1>Deye &lt;Battery&gt;</h1>");
+  CHECK(render("{{{icon}}}", v) == "<svg/>");
+  CHECK(render("{{ title }}", v) == "Deye &lt;Battery&gt;");          // spaces inside the tag
+  CHECK(render("[{{nope}}]", v) == "[]");                             // unknown variable
+  CHECK(render("{{#if sta_ip}}home {{sta_ip}}{{/if}}", v) == "home 10.1.30.117");
+  CHECK(render("{{#if empty}}A{{else}}B{{/if}}", v) == "B");
+  CHECK(render("{{#if zero}}A{{else}}B{{/if}}", v) == "B");
+  CHECK(render("{{#unless empty}}A{{/unless}}", v) == "A");
+  CHECK(render("{{#if sta_ip}}1{{#if empty}}2{{else}}3{{/if}}4{{/if}}", v) == "134");  // nested
+  CHECK(render("{{#if empty}}1{{#if sta_ip}}2{{/if}}3{{else}}4{{/if}}", v) == "4");     // hidden parent
+  CHECK(render("width:100%;a{{b", v) == "width:100%;a{{b");          // unclosed tag is text
+  CHECK(render("{{title", v) == "{{title");
+  CHECK(!has_template_tags("<p>static</p>"));
+  CHECK(has_template_tags("<p>{{x}}</p>"));
+}
+
+// ------------------------------------------------------------------ claim / clients
+static void test_claim_clients() {
+  CHECK(claim(Route::LANDING, true, false) == Claim::OURS);
+  CHECK(claim(Route::REDIRECT, true, true) == Claim::OURS);
+  CHECK(claim(Route::PASS, true, false) == Claim::NONE);    // web_server answers as usual
+  CHECK(claim(Route::PASS, true, true) == Claim::FORWARD);  // captive_portal must not see it
+  CHECK(claim(Route::PASS, false, true) == Claim::NONE);    // POST is never captive_portal's
+
+  ClientTable t;
+  Mac a, b, m;
+  a.b[5] = 1;
+  b.b[5] = 2;
+  t.set(0x6401a8c0, a);
+  CHECK(t.find(0x6401a8c0, m) && m == a);
+  t.set(0x6401a8c0, b);  // DHCP gave the IP to another client
+  CHECK(t.find(0x6401a8c0, m) && m == b);
+  t.remove(b);
+  CHECK(!t.find(0x6401a8c0, m));
+  for (uint32_t k = 0; k < 20; k++) {
+    Mac x;
+    x.b[4] = (uint8_t) k;
+    t.set(k, x);
+  }
+  CHECK(t.find(19, m) && m.b[4] == 19);  // full table keeps the newest
+}
+
 int main() {
   test_timers();
   test_hosts();
@@ -266,6 +312,8 @@ int main() {
   test_dns();
   test_quiet();
   test_strings();
+  test_templates();
+  test_claim_clients();
   std::printf("%d checks, %d failed\n", g_checks, g_fail);
   return g_fail ? EXIT_FAILURE : EXIT_SUCCESS;
 }

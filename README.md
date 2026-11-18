@@ -63,14 +63,17 @@ ap_portal:
   landing:
     mode: redirect              # redirect (302) / page (200) / gate
     path: /welcome
-    # built-in page:
+    # variables of the built-in page (usable in your own html too):
     title: My Device            # default: friendly_name
-    accent_color: "#3d7bff"
+    accent_color: "#3d7bff"     # button text turns white or black by contrast
     icon_svg: {file: icon.svg}  # or inline "<svg ...>"
     primary_label: Open device page
     secondary: {label: Router Wi-Fi, href: "/#wifi"}
-    # or your own page instead of all the keys above:
+    # your own page instead of the built-in one (a template, see below):
     # html: {file: landing.html}
+    # vars:                     # your own template variables
+    #   battery: !lambda return to_string((int) id(soc).state);
+    #   fw: "1.2.3"
     # gate only:
     # enter_path: /enter        # the button: grants this client a pass, then 302 to /
     # enter_window: 30min       # a pass ends after this long without requests
@@ -80,12 +83,44 @@ ap_portal:
   on_ap_restored:               # ESPHome switched the access point off, ap_portal brought it back
   on_portal_start:
   on_portal_stop:
+  on_landing:                   # ip, path — the landing page was shown
+  on_enter:                     # mac, ip — gate: a client pressed the button
 ```
 
 Actions: `ap_portal.scan` (background scan without dropping the router), `ap_portal.set_password`
-(`password:` empty = open network, or 8..63 characters), `ap_portal.reset_password`.
+(`password:` empty = open network, or 8..63 characters; applied 2 s later so the page that asked
+gets its answer first; kept across reboots with `password_persist: true`),
+`ap_portal.reset_password` (back to the password from `wifi: ap:`, the saved one is erased).
 
-From lambdas: `id(portal).is_active()`, `client_count()`, `ap_ip()`, `ssid()`, `is_scanning()`.
+From lambdas: `id(portal).is_active()`, `client_count()`, `ap_ip()`, `ssid()`, `is_scanning()`,
+`has_custom_password()`.
+
+### Landing page templates
+
+The built-in page and your own `html` go through the same small template engine:
+
+| Syntax | Meaning |
+|---|---|
+| `{{name}}` | the variable, HTML-escaped |
+| `{{{name}}}` | the variable as is (an SVG, a prepared fragment) |
+| `{{#if name}}…{{else}}…{{/if}}` | shown when the variable is not empty, `0` or `false`; nests |
+| `{{#unless name}}…{{/unless}}` | the opposite |
+
+Built-in variables: `title`, `ap_ip`, `sta_ip` (empty without the router), `host` (for
+`http://{{host}}.local/`), `ssid`, `enter` (`enter_path` in gate mode, otherwise `/`), `landing`,
+`mode`, `clients`, plus the styling keys above (`accent_color`, `accent_text`, `icon_svg`,
+`primary_label`, `secondary_label`, `secondary_href`). Lambdas in `vars:` run in the main loop once
+a second, never in the web server task. A page without `{{` is sent gzip-compressed from flash.
+
+```html
+<h1>{{title}}</h1>
+<p>Battery {{battery}} %</p>
+{{#if sta_ip}}<a href="http://{{sta_ip}}/">Home network</a>{{/if}}
+<a href="{{enter}}">Open the panel</a>
+```
+
+While `captive_portal` runs (quiet mode without a router), every GET from the access point goes
+through `ap_portal`: the device's pages work as usual, ESPHome's Wi-Fi form is never shown.
 
 ## Build checks
 
@@ -95,7 +130,7 @@ From lambdas: `id(portal).is_active()`, `client_count()`, `ap_ip()`, `ssid()`, `
 | No `wifi: ap:` | error |
 | No `manual_ip` in `wifi: ap:`, or a private address | warning: Android will not show the sign-in window |
 | SSID + MAC suffix longer than 32 bytes | error |
-| `html` together with the built-in page keys | error |
+| A `vars:` name that is not `[a-z_][a-z0-9_]*` or is a built-in variable | error |
 | `enter_path`, `enter_window`, `pass_paths` without `mode: gate` | error |
 | ESPHome other than 2026.10.x | warning |
 

@@ -5,8 +5,10 @@ gate), and a quiet mode that keeps phones on the access point when there is no r
 https://github.com/daimonkor/esphome-ap-portal
 """
 
+import gzip
 import ipaddress
 import logging
+import re
 
 from esphome import automation
 import esphome.codegen as cg
@@ -21,7 +23,7 @@ from esphome.const import (
     CONF_TRIGGER_ID,
     __version__ as ESPHOME_VERSION,
 )
-from esphome.core import CORE
+from esphome.core import CORE, ID
 import esphome.final_validate as fv
 
 _LOGGER = logging.getLogger(__name__)
@@ -54,13 +56,21 @@ CONF_HREF = "href"
 CONF_ENTER_PATH = "enter_path"
 CONF_ENTER_WINDOW = "enter_window"
 CONF_PASS_PATHS = "pass_paths"
+CONF_VARS = "vars"
+CONF_ON_LANDING = "on_landing"
+CONF_ON_ENTER = "on_enter"
 CONF_ON_CLIENT_CONNECTED = "on_client_connected"
 CONF_ON_CLIENT_DISCONNECTED = "on_client_disconnected"
 CONF_ON_AP_RESTORED = "on_ap_restored"
 CONF_ON_PORTAL_START = "on_portal_start"
 CONF_ON_PORTAL_STOP = "on_portal_stop"
 
-STYLE_KEYS = (CONF_TITLE, CONF_ACCENT_COLOR, CONF_ICON_SVG, CONF_PRIMARY_LABEL, CONF_SECONDARY)
+# Filled in by the component on every request; `vars:` may not reuse these names.
+BUILTIN_VARS = (
+    "title", "ap_ip", "sta_ip", "host", "ssid", "enter", "landing", "mode", "clients",
+    "accent_color", "accent_text", "icon_svg", "primary_label", "primary_default",
+    "secondary_label", "secondary_href",
+)
 GATE_KEYS = (CONF_ENTER_PATH, CONF_ENTER_WINDOW, CONF_PASS_PATHS)
 
 ap_portal_ns = cg.esphome_ns.namespace("ap_portal")
@@ -74,6 +84,12 @@ ClientDisconnectedTrigger = ap_portal_ns.class_(
 ApRestoredTrigger = ap_portal_ns.class_("ApRestoredTrigger", automation.Trigger.template())
 PortalStartTrigger = ap_portal_ns.class_("PortalStartTrigger", automation.Trigger.template())
 PortalStopTrigger = ap_portal_ns.class_("PortalStopTrigger", automation.Trigger.template())
+LandingTrigger = ap_portal_ns.class_(
+    "LandingTrigger", automation.Trigger.template(cg.std_string, cg.std_string)
+)
+EnterTrigger = ap_portal_ns.class_(
+    "EnterTrigger", automation.Trigger.template(cg.std_string, cg.std_string)
+)
 ScanAction = ap_portal_ns.class_("ScanAction", automation.Action)
 SetPasswordAction = ap_portal_ns.class_("SetPasswordAction", automation.Action)
 ResetPasswordAction = ap_portal_ns.class_("ResetPasswordAction", automation.Action)
@@ -98,6 +114,15 @@ def _hex_color(value):
     if len(h) != 6 or any(c not in "0123456789abcdefABCDEF" for c in h):
         raise cv.Invalid(f"'{value}' is not a color like #3d7bff")
     return "#" + h.lower()
+
+
+def _var_name(value):
+    value = cv.string_strict(value)
+    if not re.fullmatch(r"[a-z_][a-z0-9_]*", value):
+        raise cv.Invalid(f"'{value}': a variable name is lower case letters, digits and '_'")
+    if value in BUILTIN_VARS:
+        raise cv.Invalid(f"'{value}' is a built-in variable; pick another name")
+    return value
 
 
 # Inline text, or `file: path` read at build time.
@@ -127,18 +152,18 @@ LANDING_SCHEMA = cv.Schema(
             cv.Range(min=cv.TimePeriod(minutes=1), max=cv.TimePeriod(hours=24)),
         ),
         cv.Optional(CONF_PASS_PATHS): cv.ensure_list(_url_path),
+        # Own template variables: a string, or a lambda returning std::string (read in loop()
+        # once a second, the page gets the latest value).
+        cv.Optional(CONF_VARS, default={}): cv.Schema(
+            {cv.string_strict: cv.Any(cv.returning_lambda, cv.string)}
+        ),
     }
 )
 
 
 def _validate_landing(config):
-    if CONF_HTML in config:
-        clash = [k for k in STYLE_KEYS if k in config]
-        if clash:
-            raise cv.Invalid(
-                f"'html' is your whole page, so {', '.join(repr(k) for k in clash)} "
-                "would be ignored. Remove them, or remove 'html' to use the built-in page."
-            )
+    for name in config[CONF_VARS]:
+        _var_name(name)
     if config[CONF_MODE] != "gate":
         extra = [k for k in GATE_KEYS if k in config]
         if extra:
@@ -181,6 +206,12 @@ CONFIG_SCHEMA = cv.All(
             ),
             cv.Optional(CONF_ON_PORTAL_STOP): automation.validate_automation(
                 {cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(PortalStopTrigger)}
+            ),
+            cv.Optional(CONF_ON_LANDING): automation.validate_automation(
+                {cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(LandingTrigger)}
+            ),
+            cv.Optional(CONF_ON_ENTER): automation.validate_automation(
+                {cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(EnterTrigger)}
             ),
         }
     ).extend(cv.COMPONENT_SCHEMA),
@@ -242,6 +273,14 @@ def _final_validate(config):
 FINAL_VALIDATE_SCHEMA = _final_validate
 
 
+def _contrast_text(color):
+    """White or black text on the accent color, whichever reads better (WCAG luminance)."""
+    r, g, b = (int(color[i : i + 2], 16) / 255 for i in (1, 3, 5))
+    lin = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4 for c in (r, g, b)]
+    lum = 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]
+    return "#000000" if (lum + 0.05) / 0.05 > 1.05 / (lum + 0.05) else "#ffffff"
+
+
 def _read(value):
     if isinstance(value, dict):
         return CORE.relative_config_path(value[CONF_FILE]).read_text(encoding="utf-8")
@@ -249,6 +288,9 @@ def _read(value):
 
 
 async def to_code(config):
+    from esphome.components import wifi
+
+    wifi.enable_runtime_roaming_suppression()  # ap_portal.scan pauses ESPHome's roaming scans
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
 
@@ -269,18 +311,33 @@ async def to_code(config):
     cg.add(var.set_mode(MODES[landing[CONF_MODE]]))
     cg.add(var.set_landing_path(landing[CONF_PATH]))
     if CONF_HTML in landing:
-        cg.add(var.set_html(_read(landing[CONF_HTML])))
+        html = _read(landing[CONF_HTML])
+        if "{{" in html:
+            cg.add(var.set_html(html))
+        else:
+            # A page without template tags goes out gzip-compressed, straight from flash.
+            data = gzip.compress(html.encode("utf-8"), compresslevel=9, mtime=0)
+            arr = cg.progmem_array(ID(f"{config[CONF_ID].id}_html_gz", is_declaration=True, type=cg.uint8), list(data))
+            cg.add(var.set_html_gz(arr, len(data)))
+    accent = landing.get(CONF_ACCENT_COLOR, "#3d7bff")
+    cg.add(var.add_static_var("accent_color", accent))
+    cg.add(var.add_static_var("accent_text", _contrast_text(accent)))
     if CONF_TITLE in landing:
-        cg.add(var.set_title(landing[CONF_TITLE]))
-    if CONF_ACCENT_COLOR in landing:
-        cg.add(var.set_accent_color(landing[CONF_ACCENT_COLOR]))
+        cg.add(var.add_static_var("title", landing[CONF_TITLE]))
     if CONF_ICON_SVG in landing:
-        cg.add(var.set_icon_svg(_read(landing[CONF_ICON_SVG])))
-    if CONF_PRIMARY_LABEL in landing:
-        cg.add(var.set_primary_label(landing[CONF_PRIMARY_LABEL]))
+        cg.add(var.add_static_var("icon_svg", _read(landing[CONF_ICON_SVG])))
+    cg.add(var.add_static_var("primary_label", landing.get(CONF_PRIMARY_LABEL, "Open device page")))
+    cg.add(var.add_static_var("primary_default", "" if CONF_PRIMARY_LABEL in landing else "1"))
     if CONF_SECONDARY in landing:
         sec = landing[CONF_SECONDARY]
-        cg.add(var.set_secondary(sec[CONF_LABEL], sec[CONF_HREF]))
+        cg.add(var.add_static_var("secondary_label", sec[CONF_LABEL]))
+        cg.add(var.add_static_var("secondary_href", sec[CONF_HREF]))
+    for name, value in landing[CONF_VARS].items():
+        if isinstance(value, cv.Lambda):
+            lam = await cg.process_lambda(value, [], return_type=cg.std_string)
+            cg.add(var.add_lambda_var(name, lam))
+        else:
+            cg.add(var.add_static_var(name, value))
     if landing[CONF_MODE] == "gate":
         cg.add(var.set_enter_path(landing[CONF_ENTER_PATH]))
         cg.add(var.set_enter_window(landing[CONF_ENTER_WINDOW].total_milliseconds))
@@ -293,6 +350,12 @@ async def to_code(config):
     for conf in config.get(CONF_ON_CLIENT_DISCONNECTED, []):
         trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var)
         await automation.build_automation(trigger, [(cg.std_string, "mac")], conf)
+    for conf in config.get(CONF_ON_LANDING, []):
+        trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var)
+        await automation.build_automation(trigger, [(cg.std_string, "ip"), (cg.std_string, "path")], conf)
+    for conf in config.get(CONF_ON_ENTER, []):
+        trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var)
+        await automation.build_automation(trigger, [(cg.std_string, "mac"), (cg.std_string, "ip")], conf)
     for key in (CONF_ON_AP_RESTORED, CONF_ON_PORTAL_START, CONF_ON_PORTAL_STOP):
         for conf in config.get(key, []):
             trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var)

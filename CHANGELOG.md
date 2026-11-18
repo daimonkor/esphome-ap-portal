@@ -5,6 +5,14 @@ Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monito
 ## Unreleased
 
 ### Added
+- Stage 4: the landing page. Redirect / page / gate, a small template engine (`{{var}}`,
+  `{{{raw}}}`, `{{#if}}` / `{{#unless}}` / `{{else}}`) for the built-in page and your own `html`,
+  own variables from strings or lambdas (`vars:`), hooks `on_landing` and `on_enter`. While
+  `captive_portal` runs, every GET from the access point goes through `ap_portal`: the device's
+  pages still work, ESPHome's Wi-Fi form and `/wifisave` are not reachable. Gate passes by MAC + IP.
+- `ap_portal.scan` (background scan with the router, ESPHome's scan without), `set_password`
+  (applied 2 s after the answer, kept with `password_persist`), `reset_password`,
+  `has_custom_password()`.
 - Stage 3, the core: the access point stays up next to the router connection (ESPHome's fallback
   access point is switched off, ours is raised again after ESPHome turns it off), `manual_ip` and
   DHCP (.100–.110, DNS = access point) applied to it, own DNS on the access point address,

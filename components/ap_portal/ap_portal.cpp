@@ -1,8 +1,10 @@
 #include "ap_portal.h"
+#include "landing_page.h"
 
 #include <cerrno>
 #include <cstring>
 
+#include <esp_http_server.h>
 #include <esp_netif.h>
 #include <esp_wifi.h>
 #include <lwip/sockets.h>
@@ -45,6 +47,56 @@ static std::string mac_str(const uint8_t *m) {
 
 static esp_netif_t *ap_netif() { return esp_netif_get_handle_from_ifkey("WIFI_AP_DEF"); }
 
+static std::string ip_str(uint32_t ip_be) {
+  char b[16];
+  const uint8_t *p = reinterpret_cast<const uint8_t *>(&ip_be);
+  snprintf(b, sizeof(b), "%u.%u.%u.%u", p[0], p[1], p[2], p[3]);
+  return b;
+}
+
+// IPv4 of a socket address; IPv4-mapped IPv6 too (lwIP with IPv6 gives those).
+static uint32_t v4_of(const sockaddr_storage &a) {
+  if (a.ss_family == AF_INET)
+    return reinterpret_cast<const sockaddr_in *>(&a)->sin_addr.s_addr;
+#if LWIP_IPV6
+  if (a.ss_family == AF_INET6) {
+    const uint8_t *b = reinterpret_cast<const sockaddr_in6 *>(&a)->sin6_addr.s6_addr;
+    static const uint8_t PREFIX[12] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff};
+    if (std::memcmp(b, PREFIX, 12) == 0) {
+      uint32_t ip;
+      std::memcpy(&ip, b + 12, 4);
+      return ip;
+    }
+  }
+#endif
+  return 0;
+}
+
+// web_server_base keeps its handler list protected and the class is final. Forwarding a request
+// past captive_portal needs that list, so it is read through a member pointer obtained by explicit
+// template instantiation (allowed to name private members). Read-only, web server task only.
+namespace {
+struct HandlersTag {
+  using type = std::vector<AsyncWebHandler *> web_server_base::WebServerBase::*;
+};
+HandlersTag::type handlers_member(HandlersTag);
+template<typename Tag, typename Tag::type M> struct HandlersRobber {
+  friend typename Tag::type handlers_member(Tag) { return M; }
+};
+template struct HandlersRobber<HandlersTag, &web_server_base::WebServerBase::handlers_>;
+}  // namespace
+
+static constexpr uint32_t PASSWORD_APPLY_DELAY_MS = 2000;  // the HTTP answer leaves first
+static constexpr uint32_t SCAN_TIMEOUT_MS = 20000;
+static constexpr uint32_t SCAN_RETRY_MS = 2000;
+static constexpr uint32_t LAMBDA_REFRESH_MS = 1000;
+static constexpr uint32_t PASSWORD_MAGIC = 0xA9F0C0DE;
+struct PasswordRecord {
+  uint32_t magic;
+  uint8_t len;
+  char pw[64];
+};
+
 // ───────────────────────────── setup / loop ─────────────────────────────
 
 void ApPortal::setup() {
@@ -69,6 +121,39 @@ void ApPortal::setup() {
     w->set_ap(ap);
   }
   this->events_ = xQueueCreate(16, sizeof(Event));
+
+  // Password kept by ap_portal.set_password, applied before Wi-Fi starts.
+  {
+    auto ap = w->get_ap();
+    this->firmware_password_ = std::string(ap.get_password().c_str(), ap.get_password().size());
+    if (this->password_persist_) {
+      this->password_pref_ = global_preferences->make_preference<PasswordRecord>(fnv1_hash("ap_portal_password"));
+      PasswordRecord rec{};
+      if (this->password_pref_.load(&rec) && rec.magic == PASSWORD_MAGIC && rec.len <= 63) {
+        const std::string pw(rec.pw, rec.len);
+        if (ap_portal_core::valid_ap_password(pw)) {
+          ap.set_password(pw);
+          w->set_ap(ap);
+          this->custom_password_ = pw != this->firmware_password_;
+          ESP_LOGI(TAG, "Access point password from flash (%s)", pw.empty() ? "open" : "WPA2");
+        }
+      }
+    }
+  }
+
+  // Fixed for the web server task.
+  this->ssid_snap_ = std::string(w->get_ap().get_ssid().c_str(), w->get_ap().get_ssid().size());
+  this->host_ = App.get_name();
+  this->title_ = std::string(App.get_friendly_name().c_str(), App.get_friendly_name().size());
+  if (this->title_.empty())
+    this->title_ = this->host_;
+
+  // Before web_server (setup priority 249): our handler is asked first.
+  if (web_server_base::global_web_server_base != nullptr) {
+    web_server_base::global_web_server_base->add_handler_without_auth(this);
+  } else {
+    ESP_LOGE(TAG, "web_server_base missing: no landing page");
+  }
 }
 
 void ApPortal::loop() {
@@ -80,6 +165,24 @@ void ApPortal::loop() {
   if (!this->events_registered_)
     this->register_events_();
   this->drain_events_();
+
+  if (this->password_pending_ && ap_portal_core::reached(now, this->password_apply_at_)) {
+    this->password_pending_ = false;
+    this->apply_password_(this->password_pending_value_, this->password_pending_save_);
+    this->password_pending_value_.clear();
+  }
+  if (this->scanning_ && ap_portal_core::elapsed(now, this->scan_started_ms_, SCAN_TIMEOUT_MS)) {
+    ESP_LOGW(TAG, "scan: no result in %u s", (unsigned) (SCAN_TIMEOUT_MS / 1000));
+    this->scanning_ = false;
+    if (this->scan_suppressing_) {
+      w->release_roaming_suppression();
+      this->scan_suppressing_ = false;
+    }
+  }
+  if (this->scan_retry_at_ != 0 && ap_portal_core::reached(now, this->scan_retry_at_)) {
+    this->scan_retry_at_ = 0;
+    this->scan_start_();
+  }
 
   const bool want = this->want_active_();
   if (want != this->running_) {
@@ -95,6 +198,7 @@ void ApPortal::loop() {
   }
   if (!this->running_)
     return;
+  this->refresh_lambda_vars_(now);
 
   const bool router = w->is_connected();
   if (router) {
@@ -144,9 +248,27 @@ void ApPortal::dump_config() {
 void ApPortal::on_shutdown() {
   this->dns_close_();
   this->lock_release_();
+  std::lock_guard<std::mutex> g(this->mu_);
+  this->passes_.clear();
 }
 
 // ───────────────────────────── events ─────────────────────────────
+
+void ApPortal::post_(const Event &ev) {
+  if (this->events_ != nullptr)
+    xQueueSend(this->events_, &ev, 0);  // full queue: drop, client_count() asks the driver anyway
+}
+
+void ApPortal::on_ip_event_(void *arg, esp_event_base_t, int32_t id, void *data) {
+  if (id != IP_EVENT_AP_STAIPASSIGNED)
+    return;
+  auto *e = static_cast<ip_event_ap_staipassigned_t *>(data);
+  Event ev{};
+  ev.type = EV_IP;
+  ev.ip = e->ip.addr;
+  std::memcpy(ev.mac, e->mac, 6);
+  static_cast<ApPortal *>(arg)->post_(ev);
+}
 
 void ApPortal::on_wifi_event_(void *arg, esp_event_base_t, int32_t id, void *data) {
   auto *self = static_cast<ApPortal *>(arg);
@@ -164,11 +286,13 @@ void ApPortal::on_wifi_event_(void *arg, esp_event_base_t, int32_t id, void *dat
       ev.type = EV_AP_STOP;
       self->ap_stop_ms_ = millis();
       break;
+    case WIFI_EVENT_SCAN_DONE:
+      ev.type = EV_SCAN_DONE;
+      break;
     default:
       return;
   }
-  if (self->events_ != nullptr)
-    xQueueSend(self->events_, &ev, 0);  // full queue: drop, client_count() asks the driver anyway
+  self->post_(ev);
 }
 
 void ApPortal::register_events_() {
@@ -176,6 +300,10 @@ void ApPortal::register_events_() {
                                                     nullptr);
   if (e == ESP_OK) {
     this->events_registered_ = true;
+    esp_err_t e2 = esp_event_handler_instance_register(IP_EVENT, IP_EVENT_AP_STAIPASSIGNED, &ApPortal::on_ip_event_,
+                                                        this, nullptr);
+    if (e2 != ESP_OK)
+      ESP_LOGW(TAG, "IP event handler: %s (gate passes by IP only)", esp_err_to_name(e2));
   } else if (e != ESP_ERR_INVALID_STATE) {  // invalid state = event loop not there yet, retry next loop
     ESP_LOGE(TAG, "Wi-Fi event handler: %s", esp_err_to_name(e));
     this->events_registered_ = true;  // do not spam; client triggers stay silent
@@ -194,8 +322,30 @@ void ApPortal::drain_events_() {
       ESP_LOGD(TAG, "Client %s left", mac_str(ev.mac).c_str());
       ap_portal_core::Mac m;
       std::memcpy(m.b, ev.mac, 6);
-      this->passes_.revoke(m);
+      {
+        std::lock_guard<std::mutex> g(this->mu_);
+        this->passes_.revoke(m);
+        this->clients_.remove(m);
+      }
       this->on_client_disconnected_.call(mac_str(ev.mac));
+    } else if (ev.type == EV_IP) {
+      ap_portal_core::Mac m;
+      std::memcpy(m.b, ev.mac, 6);
+      std::lock_guard<std::mutex> g(this->mu_);
+      this->clients_.set(ev.ip, m);
+    } else if (ev.type == EV_SCAN_DONE) {
+      if (this->scanning_)
+        ESP_LOGD(TAG, "scan: done");
+      this->scanning_ = false;
+      if (this->scan_suppressing_) {
+        wifi::global_wifi_component->release_roaming_suppression();
+        this->scan_suppressing_ = false;
+      }
+    } else if (ev.type == EV_LANDING) {
+      this->on_landing_.call(ip_str(ev.ip), std::string(ev.path));
+    } else if (ev.type == EV_ENTER) {
+      ESP_LOGD(TAG, "Gate: pass for %s (%s)", mac_str(ev.mac).c_str(), ip_str(ev.ip).c_str());
+      this->on_enter_.call(mac_str(ev.mac), ip_str(ev.ip));
     } else if (ev.type == EV_AP_STOP) {
       if (this->running_)
         this->ap_stopped_by_esphome_ = true;
@@ -275,7 +425,11 @@ void ApPortal::stop_ap_() {
     cp->end();
   this->quiet_ours_ = false;
   this->lock_release_();
-  this->passes_.clear();
+  {
+    std::lock_guard<std::mutex> g(this->mu_);
+    this->passes_.clear();
+    this->clients_.clear();
+  }
   wifi_mode_t m;
   if (esp_wifi_get_mode(&m) == ESP_OK && m == WIFI_MODE_APSTA)
     esp_wifi_set_mode(WIFI_MODE_STA);
@@ -451,19 +605,278 @@ void ApPortal::lock_release_() {
   ESP_LOGD(TAG, "Radio channel lock released: %s", esp_err_to_name(e));
 }
 
-// ───────────────────────────── actions (stage 4) ─────────────────────────────
+// ───────────────────────────── HTTP ─────────────────────────────
 
-void ApPortal::scan() { ESP_LOGW(TAG, "scan: not implemented yet (stage 4)"); }
+ApPortal::Classified ApPortal::classify_(AsyncWebServerRequest *request) {
+  Classified c;
+  char ubuf[AsyncWebServerRequest::URL_BUF_SIZE];
+  c.path = std::string(request->url_to(ubuf).c_str());
+  ap_portal_core::Request r;
+  r.get = request->method() == HTTP_GET;
+  auto host = request->get_header("Host");
+  if (host.has_value())
+    r.host = host.value();
+  r.path = c.path;
+
+  // Which interface: the address the client connected to is ours on that interface.
+  const int fd = httpd_req_to_sockfd(*request);
+  sockaddr_storage local{}, peer{};
+  socklen_t ll = sizeof(local), pl = sizeof(peer);
+  const uint32_t ap_ip = this->ap_ip_be_();
+  if (fd >= 0 && ::getsockname(fd, reinterpret_cast<sockaddr *>(&local), &ll) == 0)
+    r.from_ap = ap_ip != 0 && v4_of(local) == ap_ip;
+  if (fd >= 0 && ::getpeername(fd, reinterpret_cast<sockaddr *>(&peer), &pl) == 0)
+    c.client_ip = v4_of(peer);
+
+  if (r.from_ap && this->route_.mode == ap_portal_core::Mode::GATE) {
+    std::lock_guard<std::mutex> g(this->mu_);
+    r.has_pass = this->passes_.check(c.client_ip, millis());
+  }
+  c.route = ap_portal_core::route(r, this->route_);
+  auto *cp = captive_portal::global_captive_portal;
+  c.claim = ap_portal_core::claim(c.route, r.get, cp != nullptr && cp->is_active());
+
+  if (r.get && r.from_ap) {
+    bool log = true;
+    for (const auto &p : this->log_exclude_prefixes_)
+      if (ap_portal_core::has_prefix(c.path, p))
+        log = false;
+    if (log) {
+      ESP_LOGV(TAG, "GET %s%s from %s -> %u", r.host.c_str(), c.path.c_str(), ip_str(c.client_ip).c_str(),
+               (unsigned) c.route);
+    }
+  }
+  return c;
+}
+
+bool ApPortal::canHandle(AsyncWebServerRequest *request) const {
+  auto *self = const_cast<ApPortal *>(this);  // the web server API is const; state is ours
+  if (!self->running_)
+    return false;
+  self->cls_ = self->classify_(request);
+  return self->cls_.claim != ap_portal_core::Claim::NONE;
+}
+
+void ApPortal::handleRequest(AsyncWebServerRequest *request) {
+  const Classified c = this->cls_;
+  switch (c.route) {
+    case ap_portal_core::Route::LANDING: {
+      this->send_landing_(request, c);
+      Event ev{};
+      ev.type = EV_LANDING;
+      ev.ip = c.client_ip;
+      std::strncpy(ev.path, c.path.c_str(), sizeof(ev.path) - 1);
+      this->post_(ev);
+      return;
+    }
+    case ap_portal_core::Route::REDIRECT:
+      this->send_redirect_(request, "http://" + ip_str(this->ap_ip_be_()) + this->route_.landing_path);
+      return;
+    case ap_portal_core::Route::ENTER: {
+      Event ev{};
+      ev.type = EV_ENTER;
+      ev.ip = c.client_ip;
+      {
+        std::lock_guard<std::mutex> g(this->mu_);
+        ap_portal_core::Mac m;
+        this->clients_.find(c.client_ip, m);  // unknown MAC (static IP): the pass goes by IP alone
+        this->passes_.grant(m, c.client_ip, millis());
+        std::memcpy(ev.mac, m.b, 6);
+      }
+      this->post_(ev);
+      this->send_redirect_(request, "/");
+      return;
+    }
+    case ap_portal_core::Route::PASS:
+      this->forward_(request);
+      return;
+  }
+}
+
+// A PASS while captive_portal runs: the next handler that is not captive_portal, or 404.
+void ApPortal::forward_(AsyncWebServerRequest *request) {
+  auto *base = web_server_base::global_web_server_base;
+  auto *cp = captive_portal::global_captive_portal;
+  if (base != nullptr) {
+    const auto &handlers = base->*handlers_member(HandlersTag{});
+    for (auto *h : handlers) {
+      if (h == this || h == static_cast<AsyncWebHandler *>(cp))
+        continue;
+      if (h->canHandle(request)) {
+        h->handleRequest(request);
+        return;
+      }
+    }
+  }
+  request->send(404, "text/plain", "Not found");
+}
+
+ap_portal_core::Vars ApPortal::page_vars_(const Classified &c) {
+  ap_portal_core::Vars v = this->static_vars_;  // first: YAML values win over the defaults below
+  {
+    std::lock_guard<std::mutex> g(this->mu_);
+    v.insert(v.end(), this->lambda_snap_.begin(), this->lambda_snap_.end());
+  }
+  std::string sta;
+  esp_netif_t *sn = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+  esp_netif_ip_info_t si{};
+  if (sn != nullptr && esp_netif_get_ip_info(sn, &si) == ESP_OK && si.ip.addr != 0)
+    sta = ip_str(si.ip.addr);
+  const bool gate = this->route_.mode == ap_portal_core::Mode::GATE;
+  v.emplace_back("title", this->title_);
+  v.emplace_back("ap_ip", ip_str(this->ap_ip_be_()));
+  v.emplace_back("sta_ip", sta);
+  v.emplace_back("host", this->host_);
+  v.emplace_back("ssid", this->ssid_snap_);
+  v.emplace_back("enter", gate ? this->route_.enter_path : std::string("/"));
+  v.emplace_back("landing", this->route_.landing_path);
+  v.emplace_back("mode", mode_name(this->route_.mode));
+  v.emplace_back("clients", to_string(this->client_count()));
+  return v;
+}
+
+void ApPortal::send_landing_(AsyncWebServerRequest *request, const Classified &c) {
+  if (this->html_gz_ != nullptr) {
+    auto *r = request->beginResponse(200, "text/html", this->html_gz_, this->html_gz_len_);
+    r->addHeader("Content-Encoding", "gzip");
+    r->addHeader("Cache-Control", "no-store");
+    request->send(r);
+    return;
+  }
+  const std::string &tpl = this->html_.empty() ? std::string(BUILTIN_LANDING) : this->html_;
+  std::string body = ap_portal_core::render(tpl, this->page_vars_(c));
+  if (body.size() < 8)  // Android takes 200 with an (almost) empty body for "no portal"
+    body.append("<!-- ap_portal -->");
+  auto *r = request->beginResponse(200, "text/html", body);
+  r->addHeader("Cache-Control", "no-store");
+  request->send(r);
+}
+
+// 302 with a body: some phones treat an empty answer as "internet works".
+void ApPortal::send_redirect_(AsyncWebServerRequest *request, const std::string &location) {
+  httpd_req_t *r = *request;
+  const std::string body = "<a href=\"" + location + "\">" + location + "</a>";
+  httpd_resp_set_status(r, "302 Found");
+  httpd_resp_set_type(r, "text/html");
+  httpd_resp_set_hdr(r, "Location", location.c_str());
+  httpd_resp_set_hdr(r, "Cache-Control", "no-store");
+  httpd_resp_send(r, body.c_str(), body.size());
+}
+
+void ApPortal::refresh_lambda_vars_(uint32_t now) {
+  if (this->lambda_vars_.empty())
+    return;
+  if (this->lambda_refresh_ms_ != 0 && !ap_portal_core::elapsed(now, this->lambda_refresh_ms_, LAMBDA_REFRESH_MS))
+    return;
+  this->lambda_refresh_ms_ = now ? now : 1;
+  ap_portal_core::Vars snap;
+  snap.reserve(this->lambda_vars_.size());
+  for (auto &kv : this->lambda_vars_)
+    snap.emplace_back(kv.first, kv.second());  // lambdas run here, in loop(), never in the web server task
+  std::lock_guard<std::mutex> g(this->mu_);
+  this->lambda_snap_.swap(snap);
+}
+
+// ───────────────────────────── actions ─────────────────────────────
+
+void ApPortal::scan() {
+  if (this->scanning_) {
+    ESP_LOGD(TAG, "scan: already running");
+    return;
+  }
+  this->scan_start_();
+}
+
+// With the router: a background scan — between channels the radio returns to the router's,
+// the association stays (no 1-3 s drop like ESPHome's own scan). Results reach ESPHome's
+// SCAN_DONE handler as usual, so wifi_info's scan results update. Without the router ESPHome
+// scans in its connect cycle anyway: its own scan then.
+void ApPortal::scan_start_() {
+  auto *w = wifi::global_wifi_component;
+  const uint32_t now = millis();
+  if (!w->is_connected()) {
+    ESP_LOGI(TAG, "scan: no router, ESPHome scan");
+    w->start_scanning();
+    this->scanning_ = true;
+    this->scan_started_ms_ = now;
+    return;
+  }
+  wifi_scan_config_t c{};
+  c.show_hidden = false;
+  c.scan_type = WIFI_SCAN_TYPE_ACTIVE;
+  c.scan_time.active.min = 60;
+  c.scan_time.active.max = 120;
+  c.coex_background_scan = true;
+  w->request_roaming_suppression();  // ESPHome must not take our results for a roaming scan
+  const esp_err_t e = esp_wifi_scan_start(&c, false);
+  if (e != ESP_OK) {
+    w->release_roaming_suppression();
+    ESP_LOGW(TAG, "scan: %s, retry in 2 s", esp_err_to_name(e));
+    this->scan_retry_at_ = (now + SCAN_RETRY_MS) | 1;
+    return;
+  }
+  this->scan_suppressing_ = true;
+  this->scanning_ = true;
+  this->scan_started_ms_ = now;
+  ESP_LOGI(TAG, "scan: background scan started");
+}
 
 void ApPortal::set_password(const std::string &password) {
   if (!ap_portal_core::valid_ap_password(password)) {
     ESP_LOGW(TAG, "set_password: rejected (empty or 8..63 printable characters)");
     return;
   }
-  ESP_LOGW(TAG, "set_password: not implemented yet (stage 4)");
+  // Applied 2 s later: the page that asked gets its answer before clients are dropped.
+  this->password_pending_ = true;
+  this->password_pending_save_ = true;
+  this->password_pending_value_ = password;
+  this->password_apply_at_ = millis() + PASSWORD_APPLY_DELAY_MS;
 }
 
-void ApPortal::reset_password() { ESP_LOGW(TAG, "reset_password: not implemented yet (stage 4)"); }
+void ApPortal::reset_password() {
+  this->password_pending_ = true;
+  this->password_pending_save_ = true;
+  this->password_pending_value_ = this->firmware_password_;
+  this->password_apply_at_ = millis() + PASSWORD_APPLY_DELAY_MS;
+}
+
+// Into ESPHome's own configuration (one source: whoever reads get_ap() sees it, our keeper
+// raises the access point with it) and into the running access point. Clients are dropped and
+// join again with the new password.
+void ApPortal::apply_password_(const std::string &password, bool save) {
+  auto *w = wifi::global_wifi_component;
+  auto ap = w->get_ap();
+  ap.set_password(password);
+  w->set_ap(ap);
+  this->custom_password_ = password != this->firmware_password_;
+  if (save && this->password_persist_) {
+    PasswordRecord rec{};
+    if (this->custom_password_) {
+      rec.magic = PASSWORD_MAGIC;
+      rec.len = (uint8_t) password.size();
+      std::memcpy(rec.pw, password.data(), password.size());
+    }  // firmware password: magic 0 = nothing saved
+    this->password_pref_.save(&rec);
+    global_preferences->sync();
+  }
+  esp_err_t e = ESP_OK;
+  if (this->ap_up_()) {
+    wifi_config_t c{};
+    e = esp_wifi_get_config(WIFI_IF_AP, &c);
+    if (e == ESP_OK) {
+      std::memset(c.ap.password, 0, sizeof(c.ap.password));
+      if (password.size() >= 8) {
+        c.ap.authmode = WIFI_AUTH_WPA2_PSK;
+        std::memcpy(c.ap.password, password.data(), std::min<size_t>(password.size(), sizeof(c.ap.password) - 1));
+      } else {
+        c.ap.authmode = WIFI_AUTH_OPEN;
+      }
+      e = esp_wifi_set_config(WIFI_IF_AP, &c);
+    }
+  }
+  ESP_LOGW(TAG, "Access point password %s (%s): %s", this->custom_password_ ? "changed" : "back to firmware",
+           password.empty() ? "open" : "WPA2", esp_err_to_name(e));
+}
 
 // ───────────────────────────── state ─────────────────────────────
 
