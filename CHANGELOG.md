@@ -2,7 +2,7 @@
 
 Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monitor) run on the library.
 
-## Unreleased
+## 0.1.0 — 2026-11-19
 
 ### Changed
 - The router password field is cleared after a successful connect or save, when a network is picked from the list, and when the popup opens or closes.

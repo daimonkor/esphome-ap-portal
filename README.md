@@ -3,8 +3,8 @@
 **English** · [Українська](README.uk.md) · [Русский](README.ru.md)
 
 > **Status: 0.x.** The access point, quiet mode, landing page, scan and password work and are
-> tested on an ESP32-S3; moving the first real devices onto the library is next. Until a tagged
-> release, pin a commit if you depend on it.
+> tested on an ESP32-S3 and run on the Move Sensor BLE motion sensor (ESP32-C3); HiveScale and the
+> Deye monitor are next. Pin a release tag (`@v0.1.0`) or a commit if you depend on it.
 
 Your ESP32 keeps **its own Wi-Fi access point next to the router connection**. A phone that joins
 it gets the **"Sign in to network"** window and lands on your device page — with or without a
@@ -43,7 +43,7 @@ web_server:
   local: true                   # the page works without internet
 
 external_components:
-  - source: github://daimonkor/esphome-ap-portal@main   # a tag once v0.1.0 is out
+  - source: github://daimonkor/esphome-ap-portal@v0.1.0
     components: [ap_portal]
 
 ap_portal:
