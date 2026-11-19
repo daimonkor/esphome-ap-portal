@@ -5,6 +5,7 @@ Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monito
 ## Unreleased
 
 ### Changed
+- Network list: the network the device is on is marked «✓ connected» and cannot be picked.
 - Gate mode: the Wi-Fi page, popup and `/ap_portal/` API no longer wait for Enter — anyone on the
   access point can press it anyway; the access point password is the protection.
 - Landing page in Android's sign-in window: "Open in the browser ↗" under the main button
