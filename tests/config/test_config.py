@@ -281,6 +281,12 @@ def test_wifi_ap_always_on_is_valid(tmp_path):
 
 
 @needs_2026_11
+def test_later_button_off_is_valid(tmp_path):
+    r, out = run(tmp_path, _always_on_head() + "ap_portal:\n  wifi_page:\n    later_button: false\n")
+    assert r.returncode == 0, out[-2000:]
+
+
+@needs_2026_11
 @pytest.mark.parametrize(
     "opts,needle",
     [

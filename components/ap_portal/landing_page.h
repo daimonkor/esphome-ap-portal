@@ -100,7 +100,7 @@ main{padding-bottom:140px}input.bad,input.bad:focus{border-color:#e5484d!importa
 <div class="c"><h2 id="hc">Connect</h2>
 <input id="ss" placeholder="Network name (SSID)" autocomplete="off" autocapitalize="none">
 <div class="pw"><input id="pw" type="password" placeholder="Password" autocomplete="off"><button type="button" class="ey" aria-label="Show password"></button></div>
-<button id="cn" onclick="conn()">Connect now</button><button class="s" id="cl2" onclick="connLater()">Save, connect later</button><div id="cm" class="m"></div><div id="lt"></div></div>
+<button id="cn" onclick="conn()">Connect now</button><button class="s" id="cl2" onclick="connLater()" style="display:none">Save, connect later</button><div id="cm" class="m"></div><div id="lt"></div></div>
 {{#if ap_password_block}}<div class="c"><h2 id="ha">Device Wi-Fi password</h2>
 <div class="m" id="as">{{#if custom_password}}Changed from this page{{else}}From the firmware{{/if}}</div><br>
 <div class="pw"><input id="ap" type="password" placeholder="New password, 8–63 characters" autocomplete="new-password"><button type="button" class="ey" aria-label="Show password"></button></div>
@@ -129,20 +129,20 @@ function onCopy(root,label){root.addEventListener('click',function(e){var a=e.ta
 onCopy(document,t('copied'));
 var lt=0;function again(ms){clearTimeout(lt);lt=setTimeout(load,ms)}
 function load(){apPortal.networks().then(function(j){
- later(j.later);g('st').innerHTML='';var s=document.createElement('span');s.className=j.connected?'ok':'m';
+ g('cl2').style.display=j.later_button===false?'none':'';later(j.later);g('st').innerHTML='';var s=document.createElement('span');s.className=j.connected?'ok':'m';
  var sw=j.pending&&j.target&&!(j.connected&&j.ssid===j.target),rv=!j.connected&&!sw&&j.reverted&&j.previous;
  s.textContent=j.connected?t('con')+j.ssid+' · '+j.ip+' · '+j.rssi+' dBm':sw||rv?'':t('none');g('st').appendChild(s);
  if(sw||rv){var q=document.createElement('div');q.className='m';q.innerHTML='<span class="sp"></span>'+esc((rv?t('back')+' «'+j.previous:t('going1')+' «'+j.target)+'»…');g('st').appendChild(q)}
  rfb(!!j.scanning);var ls=g('ls');ls.innerHTML='';if(!j.networks.length){var e=document.createElement('li');e.className='m';e.innerHTML=(j.scanning?'<span class="sp"></span>':'')+esc(j.scanning?(X.ld||'Searching…'):t('empty'));ls.appendChild(e)}
  j.networks.forEach(function(n){var li=document.createElement('li');var cur=j.connected&&n.ssid==j.ssid;var a=document.createElement('span');a.textContent=n.ssid;if(n.lock){var l=document.createElement('span');l.className='lk';l.textContent='🔒';a.appendChild(l)}if(cur){var c=document.createElement('span');c.className='cu';c.textContent='✓ '+(X.cur||'connected');a.appendChild(c)}var b=document.createElement('span');b.className='m';b.textContent=bars(n.rssi);
-  li.appendChild(a);li.appendChild(b);if(cur){li.className='cur';li.setAttribute('aria-disabled','true')}else{if(n.ssid==g('ss').value)li.className='sel';li.onclick=function(){g('ss').value=n.ssid;g('pw').focus();load()}}ls.appendChild(li)});
+  li.appendChild(a);li.appendChild(b);if(cur){li.className='cur';li.setAttribute('aria-disabled','true')}else{if(n.ssid==g('ss').value)li.className='sel';li.onclick=function(){g('ss').value=n.ssid;g('pw').value='';g('pw').focus();load()}}ls.appendChild(li)});
  again(j.scanning?1500:5000)}).catch(function(){rfb(false);g('st').innerHTML='';var s=document.createElement('span');s.className='m';s.textContent=t('lost');g('st').appendChild(s);again(3000)})}
 function rfb(on){var b=g('rf');b.disabled=on;b.innerHTML=on?'<span class="sp"></span>'+esc(X.ld||'Searching…'):esc(X.rf||'Search again')}
 function scan(){rfb(true);apPortal.scan().then(function(){again(800)},function(e){rfb(false);fail('cm',e.code||String(e.message||e))})}
 var tick=null;function busy(on){var b=g('cn');b.disabled=on;b.innerHTML=on?'<span class="sp"></span>'+esc(X.cn||'Connect now'):esc(X.cn||'Connect now');
  clearInterval(tick);if(on)tick=setInterval(function(){var e=g('tc');if(e)e.textContent=Math.round((Date.now()-busy.t)/1000)+' s'},500)}
 function follow(p){busy.t=p.t;busy(true);toast('<b>'+t('going1')+' «'+esc(p.ssid)+'»… <span id="tc"></span></b><div class="m">'+t('going2')+'</div>'+addrs(p.addresses)+'<div class="m">'+t('phone')+'</div>',null,true);
- apPortal.watch(p.ssid,{host:p.host,since:p.t}).then(function(x){busy(false);return x},function(e){busy(false);throw e}).then(function(x){apPortal.pending.clear();
+ apPortal.watch(p.ssid,{host:p.host,since:p.t}).then(function(x){busy(false);return x},function(e){busy(false);throw e}).then(function(x){apPortal.pending.clear();g('pw').value='';
   if(x.onAp)toast('<b>'+t('found')+' «'+esc(p.ssid)+'»</b>'+addrs([{kind:'new',url:x.url}])+'<div class="m">'+t('stayap')+'</div>');
   else toast('<b>'+t('found')+' «'+esc(p.ssid)+'»: '+esc(x.ip)+'</b>',{url:x.url,label:t('open')})})
  .catch(function(e){apPortal.pending.clear();if(e.code)toast('<b class="er">'+t('err')+' «'+esc(p.ssid)+'»: '+esc(t(e.code))+'</b><div class="m">'+(e.previous?t('back')+' «'+esc(e.previous)+'».':t('stay'))+'</div>');else toast('<b>'+t('lost')+'</b>'+addrs(p.addresses))})}
@@ -158,7 +158,7 @@ function later(n){var e=g('lt');if(!n){e.innerHTML='';return}
  g('la').onclick=function(){apPortal.networks().then(function(s){return apPortal.apply().then(function(){var p={ssid:n,host:s.host,addresses:apPortal.addresses(s,n),t:Date.now()};apPortal.pending.save(p);e.innerHTML='';follow(p)})}).catch(function(x){fail('cm',x.code||String(x.message||x))})};
  g('lc').onclick=function(){apPortal.cancel().then(function(){e.innerHTML='';again(500)},function(x){fail('cm',x.code||String(x.message||x))})}}
 function connLater(){var s=sta();if(!s)return;
- apPortal.connect(s,g('pw').value,{later:true}).then(function(){later(s);again(800)}).catch(function(e){fail('cm',e.code||String(e.message||e))})}
+ apPortal.connect(s,g('pw').value,{later:true}).then(function(){g('pw').value='';later(s);again(800)}).catch(function(e){fail('cm',e.code||String(e.message||e))})}
 function appw(){clr('am');var p=g('ap').value,c=apPortal.check.apPassword(p);if(c){fail('am',c,'ap');return}
  apPortal.setApPassword(p).then(function(){g('am').textContent=t('saved')}).catch(function(e){fail('am',e.code||String(e.message||e),'ap')})}
 function aprs(){apPortal.resetApPassword().then(function(){g('am').textContent=t('saved')}).catch(function(e){g('am').textContent=String(e.message||e)})}
@@ -248,7 +248,7 @@ R.innerHTML='<style>:host{all:initial}*{-webkit-tap-highlight-color:transparent}
 '<div class="bg"><div class="p"><h2><span>'+X.t+'</span><button class="x" aria-label="'+X.close+'">✕</button></h2>'+
 '<div class="m" id="st">…</div><h3>'+X.nets+'</h3><ul id="ls"><li class="m">'+X.srch+'</li></ul><button class="s" id="rf">'+X.again+'</button>'+
 '<h3>'+X.st+'</h3><input id="ss" placeholder="'+X.ssid+'" autocapitalize="none" autocomplete="off"><div class="pw"><input id="pw" type="password" placeholder="'+X.pw+'" autocomplete="off"><button type="button" class="ey" aria-label="Show password"></button></div>'+
-'<button class="b" id="go">'+X.go+'</button><button class="s" id="gl">'+X.gl+'</button><div class="m" id="cm"></div><div id="lt"></div></div></div><div class="tt" id="tt"></div>';
+'<button class="b" id="go">'+X.go+'</button><button class="s" id="gl" style="display:none">'+X.gl+'</button><div class="m" id="cm"></div><div id="lt"></div></div></div><div class="tt" id="tt"></div>';
 var $=function(s){return R.querySelector(s)},bg=$('.bg'),open=false;
 function esc(x){return String(x==null?'':x).replace(/[&<>"']/g,function(c){return'&#'+c.charCodeAt(0)+';'})}
 function bars(r){return r>-55?'▂▄▆█':r>-67?'▂▄▆':r>-78?'▂▄':'▂'}
@@ -261,19 +261,19 @@ function toast(h,btn,wait){var e=$('#tt');e.innerHTML='<div class="tc">'+(wait?'
 var lt=0;function again(ms){clearTimeout(lt);lt=setTimeout(load,ms)}
 function rfb(on){var b=$('#rf');b.disabled=on;b.innerHTML=on?'<span class="sp"></span>'+esc(X.srch):esc(X.again)}
 function load(){if(!open)return;apPortal.networks().then(function(j){
- later(j.later);var sw=j.pending&&j.target&&!(j.connected&&j.ssid===j.target),rv=!j.connected&&!sw&&j.reverted&&j.previous;
+ $('#gl').style.display=j.later_button===false?'none':'';later(j.later);var sw=j.pending&&j.target&&!(j.connected&&j.ssid===j.target),rv=!j.connected&&!sw&&j.reverted&&j.previous;
  $('#st').innerHTML=(j.connected?'<span class="ok">'+esc(X.con+j.ssid+' · '+j.ip+' · '+j.rssi+' dBm')+'</span>':sw||rv?'':esc(X.none))+(sw||rv?'<div class="m"><span class="sp"></span>'+esc((rv?X.back+' «'+j.previous:X.g1+' «'+j.target)+'»…')+'</div>':'');
  rfb(!!j.scanning);var ls=$('#ls');ls.innerHTML='';if(!j.networks.length)ls.innerHTML='<li class="m">'+(j.scanning?'<span class="sp"></span>'+esc(X.srch):esc(X.empty))+'</li>';
  j.networks.forEach(function(n){var li=document.createElement('li');var cur=j.connected&&n.ssid==j.ssid;li.innerHTML='<span>'+esc(n.ssid)+(n.lock?'<span class="lk">🔒</span>':'')+(cur?'<span class="cu">✓ '+esc(X.cur)+'</span>':'')+'</span><span class="m">'+bars(n.rssi)+'</span>';
-  if(cur){li.className='cur';li.setAttribute('aria-disabled','true')}else{if(n.ssid==$('#ss').value)li.className='sel';li.onclick=function(){$('#ss').value=n.ssid;$('#pw').focus();load()}}ls.appendChild(li)});
+  if(cur){li.className='cur';li.setAttribute('aria-disabled','true')}else{if(n.ssid==$('#ss').value)li.className='sel';li.onclick=function(){$('#ss').value=n.ssid;$('#pw').value='';$('#pw').focus();load()}}ls.appendChild(li)});
  if(open)again(j.scanning?1500:5000)}).catch(function(){if(!open)return;rfb(false);$('#st').innerHTML='<span class="m">'+esc(X.lost)+'</span>';again(3000)})}
-function show(v){open=v;bg.classList.toggle('on',v);if(v){rfb(true);apPortal.scan().then(function(){again(800)},function(){});load()}else clearTimeout(lt)}
+function show(v){open=v;$('#pw').value='';bg.classList.toggle('on',v);if(v){rfb(true);apPortal.scan().then(function(){again(800)},function(){});load()}else clearTimeout(lt)}
 $('.fab').onclick=function(){show(true)};if(me&&me.dataset.button=='none')$('.fab').style.display='none';$('.x').onclick=function(){show(false)};bg.onclick=function(e){if(e.target===bg)show(false)};
 $('#rf').onclick=function(){rfb(true);apPortal.scan().then(function(){again(800)},function(e){rfb(false);fail(e.code||String(e.message||e))})};
 var tick=null;function busy(on){var b=$('#go');b.disabled=on;b.innerHTML=(on?'<span class="sp"></span>':'')+esc(X.go);
  clearInterval(tick);if(on)tick=setInterval(function(){var e=$('#tc');if(e)e.textContent=Math.round((Date.now()-busy.t)/1000)+' s'},500)}
 function follow(p){busy.t=p.t;busy(true);toast('<b>'+X.g1+' «'+esc(p.ssid)+'»… <span id="tc"></span></b><div class="m">'+X.g2+'</div>'+addrs(p.addresses)+'<div class="m">'+X.ph+'</div>',null,true);
- apPortal.watch(p.ssid,{host:p.host,since:p.t}).then(function(x){busy(false);return x},function(e){busy(false);throw e}).then(function(x){apPortal.pending.clear();
+ apPortal.watch(p.ssid,{host:p.host,since:p.t}).then(function(x){busy(false);return x},function(e){busy(false);throw e}).then(function(x){apPortal.pending.clear();$('#pw').value='';
   if(x.onAp)toast('<b>'+X.found+' «'+esc(p.ssid)+'»</b>'+addrs([{kind:'new',url:x.url}])+'<div class="m">'+X.sap+'</div>');
   else toast('<b>'+X.found+' «'+esc(p.ssid)+'»: '+esc(x.ip)+'</b>',x.url)})
  .catch(function(e){apPortal.pending.clear();if(e.code)toast('<b class="er">'+X.err+' «'+esc(p.ssid)+'»: '+esc(X[e.code]||e.code)+'</b><div class="m">'+(e.previous?X.back+' «'+esc(e.previous)+'».':X.stay)+'</div>');else toast('<b>'+X.lost+'</b>'+addrs(p.addresses))})}
@@ -288,7 +288,7 @@ function later(n){var e=$('#lt');if(!n){e.innerHTML='';return}
  $('#la').onclick=function(){apPortal.networks().then(function(s){return apPortal.apply().then(function(){var p={ssid:n,host:s.host,addresses:apPortal.addresses(s,n),t:Date.now()};apPortal.pending.save(p);e.innerHTML='';follow(p)})}).catch(function(x){fail(x.code||String(x.message||x))})};
  $('#lc').onclick=function(){apPortal.cancel().then(function(){e.innerHTML='';again(500)},function(x){fail(x.code||String(x.message||x))})}}
 $('#gl').onclick=function(){var s=sta();if(!s)return;
- apPortal.connect(s,$('#pw').value,{later:true}).then(function(){later(s);again(800)}).catch(function(e){fail(e.code||String(e.message||e))})};
+ apPortal.connect(s,$('#pw').value,{later:true}).then(function(){$('#pw').value='';later(s);again(800)}).catch(function(e){fail(e.code||String(e.message||e))})};
 (function(){var p=apPortal.pending.load();if(p){show(true);follow(p)}})();
 document.addEventListener('visibilitychange',function(){if(!document.hidden&&open)load()});window.addEventListener('online',function(){if(open)load()});
 function eyes(root){var o='<svg viewBox="0 0 24 24"><path d="M12 5C7 5 2.7 8.1 1 12c1.7 3.9 6 7 11 7s9.3-3.1 11-7c-1.7-3.9-6-7-11-7zm0 11.5a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9zm0-7a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z"/></svg>',c='<svg viewBox="0 0 24 24"><path d="M12 5C7 5 2.7 8.1 1 12c1.7 3.9 6 7 11 7s9.3-3.1 11-7c-1.7-3.9-6-7-11-7zm0 11.5a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9zm0-7a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z"/><path d="M3.3 2 22 20.7 20.7 22 2 3.3z"/></svg>';[].forEach.call(root.querySelectorAll('button.ey'),function(b){var i=b.previousElementSibling;b.innerHTML=o;b.onclick=function(){var h=i.type=='password';i.type=h?'text':'password';b.innerHTML=h?c:o;i.focus()}})}

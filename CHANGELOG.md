@@ -5,6 +5,7 @@ Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monito
 ## Unreleased
 
 ### Changed
+- The router password field is cleared after a successful connect or save, when a network is picked from the list, and when the popup opens or closes.
 - Network list: the network the device is on is marked «✓ connected» and cannot be picked.
 - Gate mode: the Wi-Fi page, popup and `/ap_portal/` API no longer wait for Enter — anyone on the
   access point can press it anyway; the access point password is the protection.
@@ -59,6 +60,7 @@ Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monito
   `Promise.finally` or CSS `inset` needed (older captive WebViews), popup.js may sit in `<head>`.
 
 ### Added
+- `wifi_page: later_button` (default true): hides «Save, connect later» on the Wi-Fi page and in the popup — not needed with `wifi: ap: ap_mode: always_on`.
 - `wifi: ap: ap_mode: always_on` (ESPHome 2026.11) supported; WISP and conflicting options rejected.
 - Rejected: `/` or `/ap_portal/…` as landing/enter/Wi-Fi page path, `/` in `pass_paths`,
   `ui_button` without `web_server`. Warned: `on_power_cycle`/`on_password_reset` without

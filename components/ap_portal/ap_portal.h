@@ -60,6 +60,7 @@ class ApPortal : public Component, public AsyncWebHandler {
   void set_wifi_path(const std::string &p) { this->route_.wifi_path = p; }
   void set_wifi_ap_password(bool v) { this->wifi_ap_password_ = v; }
   void set_ui_button(bool v) { this->route_.wrap_root = v; }
+  void set_later_button(bool v) { this->later_button_ = v; }
   void set_api(bool enabled, bool from_home) {
     this->route_.api = enabled;
     this->api_from_home_ = enabled && from_home;
@@ -294,6 +295,7 @@ class ApPortal : public Component, public AsyncWebHandler {
   uint32_t later_idle_since_{0};
   std::string later_ssid_, later_psk_, later_old_ssid_, later_old_psk_, later_ssid_snap_;
   bool http_sta_later_{false};
+  bool later_button_{true};  // "Save, connect later" shown (networks JSON tells the pages)
   // keep_ap_on_connect / ap_mode: fallback
   bool keep_ap_on_connect_{false};
   bool has_ap_hidden_{false};

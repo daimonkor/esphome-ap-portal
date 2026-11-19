@@ -215,6 +215,9 @@ WIFI_PAGE_SCHEMA = cv.Schema(
         # ESPHome's own page (web_server) gets a Wi-Fi button in the corner for access point
         # clients: "/" is served as a frame around it. For a device without its own site.
         cv.Optional("ui_button", default=False): cv.boolean,
+        # "Save, connect later" on the Wi-Fi page and in the popup. Not needed when the access point
+        # stays up through a router switch (wifi: ap: ap_mode: always_on) — "Connect now" follows it.
+        cv.Optional("later_button", default=True): cv.boolean,
     }
 )
 
@@ -624,6 +627,7 @@ async def to_code(config):
         etag = '"' + hashlib.sha1(cgz + pgz).hexdigest()[:12] + '"'
         cg.add(var.set_js_etag(etag))
     wifi_page = config[CONF_WIFI_PAGE]
+    cg.add(var.set_later_button(wifi_page["later_button"]))  # the popup asks too, page or not
     if wifi_page[CONF_ENABLED]:
         cg.add(var.set_wifi_path(wifi_page[CONF_PATH]))
         cg.add(var.set_wifi_ap_password(wifi_page[CONF_AP_PASSWORD]))

@@ -1387,6 +1387,8 @@ void ApPortal::send_networks_(AsyncWebServerRequest *request) {
     }
     json_escape_into_buffer(esc, StringRef(later.c_str(), later.size()));
     out += ",\"later\":\"" + std::string(esc) + "\"";
+    if (!this->later_button_)
+      out += ",\"later_button\":false";
   }
   out += ",\"networks\":[";
   {
