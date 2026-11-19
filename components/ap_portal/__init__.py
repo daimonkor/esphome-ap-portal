@@ -6,6 +6,7 @@ https://github.com/daimonkor/esphome-ap-portal
 """
 
 import gzip
+import hashlib
 import ipaddress
 import logging
 import re
@@ -620,6 +621,8 @@ async def to_code(config):
         carr = cg.progmem_array(ID(f"{cid}_client_js_gz", is_declaration=True, type=cg.uint8), list(cgz))
         parr = cg.progmem_array(ID(f"{cid}_popup_js_gz", is_declaration=True, type=cg.uint8), list(pgz))
         cg.add(var.set_js_gz(carr, len(cgz), parr, len(pgz)))
+        etag = '"' + hashlib.sha1(cgz + pgz).hexdigest()[:12] + '"'
+        cg.add(var.set_js_etag(etag))
     wifi_page = config[CONF_WIFI_PAGE]
     if wifi_page[CONF_ENABLED]:
         cg.add(var.set_wifi_path(wifi_page[CONF_PATH]))

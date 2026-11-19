@@ -1228,16 +1228,32 @@ void ApPortal::handle_api_(AsyncWebServerRequest *request, const Classified &c) 
     const uint8_t *gz = popup ? this->popup_js_gz_ : this->client_js_gz_;
     const size_t len = popup ? this->popup_js_gz_len_ : this->client_js_gz_len_;
     if (gz != nullptr) {
+      // no-cache + ETag: after a reflash the phone gets the new script at once (max-age kept the
+      // old one for 5 minutes); until then a 304 without a body.
+      if (this->js_etag_ != nullptr) {
+        auto inm = request->get_header("If-None-Match");
+        if (inm.has_value() && *inm == this->js_etag_) {
+          // ESPHome's beginResponse maps unknown codes to 500, so the 304 goes out directly
+          httpd_req_t *hr = *request;
+          httpd_resp_set_status(hr, "304 Not Modified");
+          httpd_resp_set_hdr(hr, "ETag", this->js_etag_);
+          httpd_resp_set_hdr(hr, "Cache-Control", "no-cache");
+          httpd_resp_send(hr, nullptr, 0);
+          return;
+        }
+      }
       auto *r = request->beginResponse(200, "application/javascript", gz, len);
       r->addHeader("Content-Encoding", "gzip");
-      r->addHeader("Cache-Control", "max-age=300");
+      r->addHeader("Cache-Control", "no-cache");
+      if (this->js_etag_ != nullptr)
+        r->addHeader("ETag", this->js_etag_);
       request->send(r);
       return;
     }
     std::string js(CLIENT_JS);
     if (popup)
       js += POPUP_JS;  // one file: the client, then the popup
-    send_owned_(request, 200, "application/javascript", js, "max-age=300");
+    send_owned_(request, 200, "application/javascript", js, "no-cache");
     return;
   }
   if (!post) {

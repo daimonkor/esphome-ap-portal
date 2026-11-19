@@ -41,6 +41,9 @@ class ApPortal : public Component, public AsyncWebHandler {
     this->popup_js_gz_ = popup;
     this->popup_js_gz_len_ = popup_len;
   }
+  void set_js_etag(const char *etag) {
+    this->js_etag_ = etag;
+  }
   void set_html_gz(const uint8_t *data, size_t len) {
     this->html_gz_ = data;
     this->html_gz_len_ = len;
@@ -241,6 +244,7 @@ class ApPortal : public Component, public AsyncWebHandler {
   size_t client_js_gz_len_{0};
   const uint8_t *popup_js_gz_{nullptr};
   size_t popup_js_gz_len_{0};
+  const char *js_etag_{nullptr};  // build hash: the browser revalidates, gets 304 until a reflash
   void send_owned_(AsyncWebServerRequest *request, int code, const char *type, const std::string &body,
                    const char *cache = nullptr);
   const uint8_t *html_gz_{nullptr};
