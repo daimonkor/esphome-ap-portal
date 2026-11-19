@@ -58,7 +58,7 @@ onCopy(document,(T[L]||[])[8]||'Copied');
  if(apple&&ib)ib.style.display='block';
  if(!droid||!br)return;
  br.style.display='block';if(bh)bh.style.display='block';
- br.onclick=function(e){var u=abs();if(!u||!/^https?:$/.test(u.protocol))return;e.preventDefault();copyText(u.href);
+ br.onclick=function(e){var u=abs();if(!u||!/^https?:$/.test(u.protocol))return;e.preventDefault();
   location.href='intent://'+u.host+u.pathname+u.search+'#Intent;scheme='+u.protocol.slice(0,-1)+
    ';action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;S.browser_fallback_url='+encodeURIComponent(u.href)+';end'}})();
 {{#if secondary_default}}var sc=document.getElementById('sc');if(sc)sc.onclick=function(e){if(window.apPortalPopup){e.preventDefault();window.apPortalPopup.open()}};{{/if}}
