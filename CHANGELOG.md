@@ -2,6 +2,18 @@
 
 Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monitor) run on the library.
 
+## 0.1.1 — 2026-11-19
+
+### Security
+- CSRF: any web page the user had open could send a plain form POST to `/ap_portal/connect`
+  (switch the device to another router), `/ap_portal/ap_password` or the reset — from the home
+  network with `api: {from_home: true}` (the browser sends a cached `web_server` login along) and
+  from an access point client's browser. POSTs now need the header `X-AP-Portal: 1` (a browser sends
+  it cross-site only after a CORS preflight, which the device refuses) and, when the browser names
+  the page's `Origin`, the device's own address; `Sec-Fetch-Site: cross-site` is refused too.
+  Everything else gets `403 {"error":"forbidden"}`. `client.js` / `popup.js` send the header, so
+  pages using them need no change; your own `fetch`/`curl` calls must add it.
+
 ## 0.1.0 — 2026-11-19
 
 ### Changed

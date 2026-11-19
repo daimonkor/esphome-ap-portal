@@ -4,7 +4,7 @@
 
 > **Status: 0.x.** The access point, quiet mode, landing page, scan and password work and are
 > tested on an ESP32-S3 and run on the Move Sensor BLE motion sensor (ESP32-C3); HiveScale and the
-> Deye monitor are next. Pin a release tag (`@v0.1.0`) or a commit if you depend on it.
+> Deye monitor are next. Pin a release tag (`@v0.1.1`) or a commit if you depend on it.
 
 Your ESP32 keeps **its own Wi-Fi access point next to the router connection**. A phone that joins
 it gets the **"Sign in to network"** window and lands on your device page — with or without a
@@ -43,7 +43,7 @@ web_server:
   local: true                   # the page works without internet
 
 external_components:
-  - source: github://daimonkor/esphome-ap-portal@v0.1.0
+  - source: github://daimonkor/esphome-ap-portal@v0.1.1
     components: [ap_portal]
 
 ap_portal:
@@ -166,7 +166,7 @@ Errors come back as `400` with `{"error": "<code>"}` and reject the promise with
 text next to the field.
 
 By default only access point clients reach the API. `api: {from_home: true}` opens it to the home
-network too, behind `web_server`'s login if it has one. `wifi_page: {enabled: false}` keeps the API
+network too, behind `web_server`'s login if it has one. Every POST must carry the header `X-AP-Portal: 1` (`client.js` / `popup.js` send it) and, when the browser sends `Origin`, come from the device's own address; anything else gets `403` `{"error":"forbidden"}`, so another web page can't switch the router or change the password (`curl -H 'X-AP-Portal: 1' -d ssid=… http://<device>/ap_portal/connect`). `wifi_page: {enabled: false}` keeps the API
 and drops the built-in page.
 
 ### Keep the access point on router connections

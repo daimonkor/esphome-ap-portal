@@ -14,6 +14,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <cctype>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -711,5 +712,53 @@ class FallbackAp {
   uint32_t no_router_since_{0}, idle_since_{0};
   bool on_{false};
 };
+
+
+// ── CSRF guard for the POST endpoints ──
+// Any web page the user opens can send a form POST to the device (a "simple" cross-site request:
+// no preflight, cached web_server login sent along) and switch it to another router or change the
+// access point password. A POST is taken only with our own header — a browser sends a custom
+// header cross-site only after a CORS preflight, which the device never grants — and, when the
+// browser names the page's origin, only from the device's own address.
+constexpr const char *CSRF_HEADER = "X-AP-Portal";
+
+// "http://10.1.30.117:80" -> "10.1.30.117:80"; "null" or garbage -> ""
+inline std::string origin_host(const std::string &origin) {
+  const size_t p = origin.find("://");
+  if (p == std::string::npos)
+    return "";
+  std::string h = origin.substr(p + 3);
+  const size_t slash = h.find('/');
+  if (slash != std::string::npos)
+    h.resize(slash);
+  for (auto &ch : h)
+    ch = (char) std::tolower((unsigned char) ch);
+  return h;
+}
+
+inline std::string host_lower(const std::string &h) {
+  std::string out = h;
+  for (auto &ch : out)
+    ch = (char) std::tolower((unsigned char) ch);
+  return out;
+}
+
+// has_header: our header present; origin / host / fetch_site: the request's Origin, Host and
+// Sec-Fetch-Site headers ("" when absent).
+inline bool post_allowed(bool has_header, const std::string &origin, const std::string &host,
+                         const std::string &fetch_site) {
+  if (!has_header)
+    return false;
+  if (fetch_site == "cross-site")
+    return false;
+  if (!origin.empty()) {
+    if (origin == "null")
+      return false;
+    const std::string oh = origin_host(origin);
+    if (oh.empty() || oh != host_lower(host))
+      return false;
+  }
+  return true;
+}
 
 }  // namespace ap_portal_core

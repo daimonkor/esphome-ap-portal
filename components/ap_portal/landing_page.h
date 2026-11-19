@@ -184,13 +184,13 @@ document.addEventListener('visibilitychange',function(){if(!document.hidden)load
 //   networks().later                   -> the saved network still waiting, or ""
 //   apPortal.setApPassword(pw), apPortal.resetApPassword()
 //   Errors: the promise rejects with Error.code = ssid_empty | ssid_long | psk_length |
-//   ap_password_length | method | not_found | http_<status>; apPortal.check.ssid(s) / .psk(p) /
+//   ap_password_length | method | not_found | forbidden | http_<status>; apPortal.check.ssid(s) / .psk(p) /
 //   .apPassword(p) give the same code before sending ('' = fine).
 static const char CLIENT_JS[] = R"JS((function(w){var A='/ap_portal/';
 function j(u,o){return fetch(u,o).then(function(r){var t=r.headers.get('content-type')||'',b=t.indexOf('json')>=0?r.json():r.text();
  if(r.ok)return b;return b.then(function(x){var e=new Error((x&&x.error)||('HTTP '+r.status));e.code=(x&&x.error)||('http_'+r.status);e.status=r.status;throw e},function(){var e=new Error('HTTP '+r.status);e.code='http_'+r.status;throw e})})}
 function bytes(s){try{return new TextEncoder().encode(s).length}catch(e){return unescape(encodeURIComponent(s)).length}}
-function f(d){var b=[];for(var k in d)b.push(k+'='+encodeURIComponent(d[k]));return{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:b.join('&')}}
+function f(d){var b=[];for(var k in d)b.push(k+'='+encodeURIComponent(d[k]));return{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-AP-Portal':'1'},body:b.join('&')}}
 var P={base:'',
 // The same rules as the device: '' when fine, otherwise the error code it would answer with.
 check:{ssid:function(s){return !s?'ssid_empty':bytes(s)>32?'ssid_long':''},

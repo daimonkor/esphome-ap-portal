@@ -486,7 +486,32 @@ static void test_fallback_ap() {
   CHECK(!f.update(true, 0, 390000));    // idle counted from the return
 }
 
+
+static void test_csrf() {
+  using ap_portal_core::post_allowed;
+  using ap_portal_core::origin_host;
+  CHECK(origin_host("http://10.1.30.117") == "10.1.30.117");
+  CHECK(origin_host("http://Sensor.local:8080/x") == "sensor.local:8080");
+  CHECK(origin_host("null") == "");
+  // our page: header, same origin
+  CHECK(post_allowed(true, "http://10.1.30.117", "10.1.30.117", "same-origin"));
+  CHECK(post_allowed(true, "http://move-sensor.local", "Move-Sensor.local", ""));
+  // no Origin / Sec-Fetch-Site (older browsers, curl with the header)
+  CHECK(post_allowed(true, "", "192.168.1.118", ""));
+  // a form or fetch from another site: no header
+  CHECK(!post_allowed(false, "https://evil.example", "192.168.1.118", "cross-site"));
+  CHECK(!post_allowed(false, "", "192.168.1.118", ""));
+  // header but a foreign origin (some other page on the LAN, a rebinding name)
+  CHECK(!post_allowed(true, "http://192.168.1.50", "192.168.1.118", "same-site"));
+  CHECK(!post_allowed(true, "http://192.168.1.118", "attacker.example", ""));
+  CHECK(!post_allowed(true, "null", "192.168.1.118", ""));
+  CHECK(!post_allowed(true, "http://192.168.1.118", "192.168.1.118", "cross-site"));
+  // the access point page and the sensor's own site posting to itself
+  CHECK(post_allowed(true, "http://100.64.4.1", "100.64.4.1", "same-origin"));
+}
+
 int main() {
+  test_csrf();
   test_timers();
   test_hosts();
   test_route_redirect_page();

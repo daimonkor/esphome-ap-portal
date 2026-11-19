@@ -44,7 +44,7 @@ web_server:
   local: true                   # страница работает без интернета
 
 external_components:
-  - source: github://daimonkor/esphome-ap-portal@main   # тег после выхода v0.1.0
+  - source: github://daimonkor/esphome-ap-portal@v0.1.1
     components: [ap_portal]
 
 ap_portal:
@@ -144,7 +144,7 @@ ap_portal:
 `ap_password_length`), промис отклоняется с `Error.code`; `apPortal.check.ssid()/.psk()/.apPassword()`
 проверяют то же самое до отправки.
 По умолчанию API доступен только клиентам точки доступа; `api: {from_home: true}` открывает его и
-домашней сети (под логином `web_server`, если он задан).
+домашней сети (под логином `web_server`, если он задан). Каждый POST должен нести заголовок `X-AP-Portal: 1` (`client.js` / `popup.js` шлют его сами) и, если браузер прислал `Origin`, идти с адреса самого устройства; иначе `403` `{"error":"forbidden"}` — чужая веб-страница не сменит роутер и пароль точки.
 
 ### Точка доступа не гаснет при подключении к роутеру
 

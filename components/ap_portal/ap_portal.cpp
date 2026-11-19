@@ -1550,6 +1550,19 @@ void ApPortal::handle_api_(AsyncWebServerRequest *request, const Classified &c) 
     this->send_api_error_(request, "method", 405);
     return;
   }
+  {
+    auto hdr = [request](const char *n) {
+      auto v = request->get_header(n);
+      return v.has_value() ? std::string(v.value()) : std::string();
+    };
+    if (!ap_portal_core::post_allowed(request->get_header(ap_portal_core::CSRF_HEADER).has_value(), hdr("Origin"), hdr("Host"),
+                                      hdr("Sec-Fetch-Site"))) {
+      ESP_LOGW(TAG, "POST %s from %s refused: no %s header or a foreign origin", p.c_str(),
+               ip_str(c.client_ip).c_str(), ap_portal_core::CSRF_HEADER);
+      this->send_api_error_(request, "forbidden", 403);
+      return;
+    }
+  }
   if (p == a + "scan") {
     std::lock_guard<std::mutex> g(this->mu_);
     this->http_scan_ = true;
@@ -1617,7 +1630,9 @@ void ApPortal::send_api_error_(AsyncWebServerRequest *request, const char *code,
     return;
   }
   httpd_req_t *h = *request;  // 405 is not among the codes AsyncWebServerRequest knows
-  httpd_resp_set_status(h, status == 404 ? "404 Not Found" : "405 Method Not Allowed");
+  httpd_resp_set_status(h, status == 404   ? "404 Not Found"
+                          : status == 403 ? "403 Forbidden"
+                                          : "405 Method Not Allowed");
   httpd_resp_set_type(h, "application/json");
   httpd_resp_send(h, body.c_str(), body.size());
 }
