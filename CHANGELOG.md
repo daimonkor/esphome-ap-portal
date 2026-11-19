@@ -60,7 +60,7 @@ Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monito
   `Promise.finally` or CSS `inset` needed (older captive WebViews), popup.js may sit in `<head>`.
 
 ### Added
-- `wifi_page: later_button` (default true): hides «Save, connect later» on the Wi-Fi page and in the popup — not needed with `wifi: ap: ap_mode: always_on`.
+- «Save, connect later» shows only where the access point may drop during a router switch: hidden by default with `wifi: ap: ap_mode: always_on` or `keep_ap_on_connect`; `wifi_page: later_button` overrides.
 - `wifi: ap: ap_mode: always_on` (ESPHome 2026.11) supported; WISP and conflicting options rejected.
 - Rejected: `/` or `/ap_portal/…` as landing/enter/Wi-Fi page path, `/` in `pass_paths`,
   `ui_button` without `web_server`. Warned: `on_power_cycle`/`on_password_reset` without

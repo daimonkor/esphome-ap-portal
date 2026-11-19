@@ -98,7 +98,7 @@ ap_portal:
     enabled: true               # scan list, connect to a router network, the access point password
     path: /wifi                 # the landing page's second button leads here unless you set `secondary`
     ap_password: true           # the access point password block
-    later_button: true          # "Save, connect later"; false with wifi: ap: ap_mode: always_on
+    # later_button: false       # "Save, connect later"; by default off with wifi: ap: ap_mode: always_on or keep_ap_on_connect
   password_reset:               # with password_persist: back to the password from wifi: ap:
     power_cycles: 4             # RESET button (or power) 4 times in a row, each start under 10 s; 0 = off
     # pin: GPIO2                # a button held while running; default: the board's BOOT button

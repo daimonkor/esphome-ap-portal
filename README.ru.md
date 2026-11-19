@@ -94,7 +94,7 @@ ap_portal:
     enabled: true               # список сетей, подключение к роутеру, пароль точки доступа
     path: /wifi                 # сюда ведёт вторая кнопка стартовой страницы, если не задан `secondary`
     ap_password: true           # блок пароля точки доступа
-    later_button: true          # «Сохранить, подключить позже»; false при wifi: ap: ap_mode: always_on
+    # later_button: false       # «Сохранить, подключить позже»; по умолчанию выключена при wifi: ap: ap_mode: always_on или keep_ap_on_connect
   password_reset:               # с password_persist: вернуть пароль из wifi: ap:
     power_cycles: 4             # кнопка RESET (или питание) 4 раза подряд, каждый запуск короче 10 с; 0 = выкл
     # pin: GPIO2                # кнопка, которую держат во время работы; по умолчанию BOOT на плате
