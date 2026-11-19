@@ -8,6 +8,7 @@ namespace esphome::ap_portal {
 static const char BUILTIN_LANDING[] = R"HTML(<!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{{title}}</title><style>
+*{-webkit-tap-highlight-color:transparent}:focus:not(:focus-visible){outline:none}button,a,li{transition:opacity .15s}button:active:not(:disabled),a:active,li:active{opacity:.7}
 :root{color-scheme:light dark}
 body{margin:0;min-height:100vh;display:grid;place-items:center;font:16px/1.45 system-ui,-apple-system,Roboto,sans-serif;background:#f4f5f8;color:#1b2230}
 @media(prefers-color-scheme:dark){body{background:#0b0d12;color:#f2f4f8}.c{background:rgba(255,255,255,.05)!important}}
@@ -67,6 +68,7 @@ onCopy(document,(T[L]||[])[8]||'Copied');
 static const char BUILTIN_WIFI[] = R"HTML(<!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{{title}} · Wi-Fi</title><style>
+*{-webkit-tap-highlight-color:transparent}:focus:not(:focus-visible){outline:none}button,a,li{transition:opacity .15s}button:active:not(:disabled),a:active,li:active{opacity:.7}
 :root{color-scheme:light dark}
 body{margin:0;font:16px/1.45 system-ui,-apple-system,Roboto,sans-serif;background:#f4f5f8;color:#1b2230}
 @media(prefers-color-scheme:dark){body{background:#0b0d12;color:#f2f4f8}.c{background:rgba(255,255,255,.05)!important}input{background:rgba(255,255,255,.06)!important;color:inherit}}
@@ -224,7 +226,7 @@ uk:{ssid_empty:'Вкажіть назву мережі',ssid_long:'Назва м
 ru:{ssid_empty:'Укажите имя сети',ssid_long:'Имя сети длиннее 32 байт',psk_length:'Пароль — 8–64 символа (или пустой для открытой сети)',ap_password_length:'8–63 символа (латиница, цифры, знаки) или пусто для открытой сети',gl:'Сохранить, подключить позже',lw:'Ожидает подключения:',lh:'Устройство остаётся в текущей сети, пока вы на его Wi-Fi. Подключится, когда последний телефон отключится от его Wi-Fi, или после перезагрузки.',lx:'Отменить',sap:'Вы на Wi-Fi устройства — продолжайте здесь. Адрес выше — для домашней сети.',tap:'Нажмите адрес, чтобы скопировать.',cop:'Скопировано',ph:'Телефон может перейти на другую сеть — тогда откройте адрес выше.',wrong_password:'неверный пароль',not_found:'сеть не найдена',failed:'ошибка подключения',err:'Не удаётся подключиться к',stay:'Устройство остаётся на своей точке доступа — исправьте и подключите снова.',back:'Устройство вернётся к',t:'Wi-Fi',st:'Сеть роутера',con:'Устройство в сети ',lost:'Нет связи с устройством — телефон не на его точке?',none:'Не подключено к роутеру',nets:'Сети',srch:'Поиск…',again:'Искать ещё раз',empty:'Сетей не найдено',ssid:'Имя сети (SSID)',pw:'Пароль',go:'Подключить сейчас',name:'Укажите имя сети',g1:'Подключаюсь к',g2:'Страница может перестать отвечать. Устройство будет здесь:',ap:'Через Wi-Fi устройства',nw:'В новой сети',found:'Устройство в сети',open:'Открыть',lost:'Не удалось найти устройство. Попробуйте адреса:',close:'Закрыть'}},X=T[L]||T.en;
 var host=document.createElement('div');host.style.cssText='position:fixed;z-index:2147483000;bottom:16px;'+(pos=='left'?'left':'right')+':16px';
 (document.body||document.documentElement).appendChild(host);var R=host.attachShadow({mode:'open'});
-R.innerHTML='<style>:host{all:initial}*{box-sizing:border-box;font:15px/1.4 system-ui,-apple-system,Roboto,sans-serif}'+
+R.innerHTML='<style>:host{all:initial}*{-webkit-tap-highlight-color:transparent}:focus:not(:focus-visible){outline:none}button,a,li{transition:opacity .15s}button:active:not(:disabled),a:active,li:active{opacity:.7}*{box-sizing:border-box;font:15px/1.4 system-ui,-apple-system,Roboto,sans-serif}'+
 '.fab{width:52px;height:52px;border-radius:50%;border:0;background:'+acc+';color:#fff;box-shadow:0 6px 20px rgba(0,0,0,.3);cursor:pointer;display:grid;place-items:center}'+
 '.fab svg{width:26px;height:26px;fill:currentColor}.bg{display:none;position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.45);align-items:flex-end;justify-content:center}'+
 '.bg.on{display:flex}.p{width:100%;max-width:440px;max-height:88vh;overflow:auto;background:#fff;color:#1b2230;border-radius:20px 20px 0 0;padding:18px}'+

@@ -28,6 +28,7 @@ Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monito
   one slot.
 
 ### Fixed
+- No rectangular tap highlight on phones (landing, /wifi page, popup); a pressed button dims instead, focus rings only for the keyboard.
 - The network list showed only the configured network: ap_portal now asks ESPHome to keep every scan record (and reads them under ESPHome's scan-results lock).
 - "Search again" shows a spinner and is disabled while the device scans (popup and /wifi page).
 - Crash (out of memory, `std::bad_alloc`) on an ESP32-C3 with BLE when a page loaded `popup.js`:
