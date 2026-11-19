@@ -428,6 +428,17 @@ static void test_reboot_timer() {
   CHECK(w.update(false, 0, 120000));
 }
 
+static void test_switch_hopeless() {
+  using namespace ap_portal_core;
+  CHECK(!switch_hopeless(2, 15));   // two wrong-password answers: not yet
+  CHECK(switch_hopeless(3, 15));    // three: give up, back to the old network
+  CHECK(switch_hopeless(3, 202));
+  CHECK(switch_hopeless(4, 201));   // network not there
+  CHECK(!switch_hopeless(5, 205));  // a plain failure waits for the deadline
+  CHECK(!switch_hopeless(5, 8));    // our own leave is no answer
+  CHECK(!switch_hopeless(0, 0));
+}
+
 static void test_passes_unknown_mac() {
   using ap_portal_core::Mac;
   using ap_portal_core::PassTable;
@@ -483,6 +494,7 @@ int main() {
   test_sta_errors();
   test_fallback_ap();
   test_passes_unknown_mac();
+  test_switch_hopeless();
   test_reboot_timer();
   std::printf("%d checks, %d failed\n", g_checks, g_fail);
   return g_fail ? EXIT_FAILURE : EXIT_SUCCESS;

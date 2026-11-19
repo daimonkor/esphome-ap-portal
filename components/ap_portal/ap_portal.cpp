@@ -865,7 +865,8 @@ void ApPortal::switch_tick_(uint32_t now) {
     this->check_erase_();  // the new network works, nothing to check after a restart
     return;
   }
-  if (!ap_portal_core::reached(now, this->switch_deadline_))
+  const bool hopeless = ap_portal_core::switch_hopeless(this->sw_fails_.load(), this->sta_reason_.load());
+  if (!hopeless && !ap_portal_core::reached(now, this->switch_deadline_))
     return;
   this->switch_pending_ = false;
   if (this->switch_old_ssid_.empty() || this->switch_old_ssid_ == this->switch_target_) {
@@ -873,8 +874,8 @@ void ApPortal::switch_tick_(uint32_t now) {
     return;
   }
   this->log_switch_reasons_("gave up");
-  ESP_LOGW(TAG, "Wi-Fi page: '%s' did not connect in %u s (%s), back to '%s'", this->switch_target_.c_str(),
-           (unsigned) (this->fb_timeout_ / 1000), ap_portal_core::sta_error_kind(this->sta_reason_.load()),
+  ESP_LOGW(TAG, "Wi-Fi page: '%s' did not connect (%s, %s), back to '%s'", this->switch_target_.c_str(),
+           ap_portal_core::sta_error_kind(this->sta_reason_.load()), hopeless ? "gave up early" : "time is up",
            this->switch_old_ssid_.c_str());
   {
     std::lock_guard<std::mutex> g(this->mu_);

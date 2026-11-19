@@ -30,6 +30,7 @@ Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monito
   one slot.
 
 ### Fixed
+- A router switch with a wrong password (or a network that is not there) went back to the old network only after the whole fallback time; it now gives up after 3 such answers in a row, and the page reports the error when the device has gone back, not before.
 - Router switch from the page failed every other time: ESPHome took its first attempt from its last scan list, where the old network sorted first, and went to the old access point with the new password. The list is dropped on a switch, so ESPHome scans for the new network.
 - Builds without any `manual_ip` failed (`get_manual_ip` exists only with `USE_WIFI_MANUAL_IP`).
 - The log names the failed attempts of a switch («connected 'X' in N ms after K failed attempt(s), reasons …»); the error on the page shows the reason code.

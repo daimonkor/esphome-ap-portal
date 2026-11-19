@@ -627,6 +627,17 @@ inline const char *sta_error_kind(uint8_t reason) {
   }
 }
 
+// A router switch from the page that cannot work: the same clear answer several times in a row
+// (wrong password, network not there). Waiting the whole fallback time only keeps the device off
+// every router; anything else (a timeout, an association failure) may still pass and waits.
+static constexpr uint8_t SWITCH_HOPELESS_FAILS = 3;
+inline bool switch_hopeless(uint8_t fails, uint8_t reason) {
+  if (fails < SWITCH_HOPELESS_FAILS)
+    return false;
+  const char *k = sta_error_kind(reason);
+  return std::strcmp(k, "wrong_password") == 0 || std::strcmp(k, "not_found") == 0;
+}
+
 // ───────────────────────────── access point only without a router (ap_mode: fallback) ─────────────────────────────
 // Up once there has been no router for `after`. Router back: down only after nobody has been on the
 // access point for `idle` — a phone in the middle of something is never thrown off.
