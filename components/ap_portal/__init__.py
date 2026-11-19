@@ -160,6 +160,21 @@ def _pass_path(value):
     return value
 
 
+def _builtin_js():
+    """CLIENT_JS and POPUP_JS as landing_page.h has them (the C++ copies stay as a fallback)."""
+    import re
+    from pathlib import Path
+
+    src = (Path(__file__).parent / "landing_page.h").read_text(encoding="utf-8")
+    out = {}
+    for name in ("CLIENT_JS", "POPUP_JS"):
+        m = re.search(r"static const char " + name + r'\[\] = R"JS\((.*?)\)JS";', src, re.S)
+        if m is None:
+            raise cv.Invalid(f"ap_portal: {name} not found in landing_page.h")
+        out[name] = m.group(1)
+    return out["CLIENT_JS"], out["POPUP_JS"]
+
+
 def _hex_color(value):
     value = cv.string_strict(value).strip()
     h = value[1:] if value.startswith("#") else value
@@ -590,6 +605,15 @@ async def to_code(config):
         await automation.build_automation(trigger, [(cg.std_string, "to"), (cg.std_string, "ssid")], conf)
     api = config[CONF_API]
     cg.add(var.set_api(api[CONF_ENABLED], api[CONF_FROM_HOME]))
+    if api[CONF_ENABLED]:
+        # client.js / popup.js: gzip-compressed here and served straight from flash (no heap)
+        client, popup = _builtin_js()
+        cid = config[CONF_ID].id
+        cgz = gzip.compress(client.encode("utf-8"), compresslevel=9, mtime=0)
+        pgz = gzip.compress((client + popup).encode("utf-8"), compresslevel=9, mtime=0)
+        carr = cg.progmem_array(ID(f"{cid}_client_js_gz", is_declaration=True, type=cg.uint8), list(cgz))
+        parr = cg.progmem_array(ID(f"{cid}_popup_js_gz", is_declaration=True, type=cg.uint8), list(pgz))
+        cg.add(var.set_js_gz(carr, len(cgz), parr, len(pgz)))
     wifi_page = config[CONF_WIFI_PAGE]
     if wifi_page[CONF_ENABLED]:
         cg.add(var.set_wifi_path(wifi_page[CONF_PATH]))

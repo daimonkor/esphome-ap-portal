@@ -28,6 +28,10 @@ Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monito
   one slot.
 
 ### Fixed
+- Crash (out of memory, `std::bad_alloc`) on an ESP32-C3 with BLE when a page loaded `popup.js`:
+  it was built as one ~22 KB string and copied again by the response. `client.js` / `popup.js` are
+  now gzip-compressed at build time and sent from flash (~8 KB, no heap); rendered pages and JSON
+  are sent without the response's second copy, and templates are no longer copied before rendering.
 - Changing the access point password (page, action, BOOT) made ESPHome switch the access point off
   again on the next router connection with `keep_ap_on_connect` (`set_ap()` restores ESPHome's flag).
 - Reboot without a router: with an access point raised by ap_portal, ESPHome 2026.11 rebooted even

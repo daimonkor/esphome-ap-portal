@@ -35,6 +35,12 @@ class ApPortal : public Component, public AsyncWebHandler {
   void set_mode(uint8_t m) { this->route_.mode = static_cast<ap_portal_core::Mode>(m); }
   void set_landing_path(const std::string &p) { this->route_.landing_path = p; }
   void set_html(const std::string &h) { this->html_ = h; }
+  void set_js_gz(const uint8_t *client, size_t client_len, const uint8_t *popup, size_t popup_len) {
+    this->client_js_gz_ = client;
+    this->client_js_gz_len_ = client_len;
+    this->popup_js_gz_ = popup;
+    this->popup_js_gz_len_ = popup_len;
+  }
   void set_html_gz(const uint8_t *data, size_t len) {
     this->html_gz_ = data;
     this->html_gz_len_ = len;
@@ -231,6 +237,12 @@ class ApPortal : public Component, public AsyncWebHandler {
   Classified cls_;  // canHandle -> handleRequest of the same request (web server task only)
 
   std::string html_;  // the template; empty = built-in page
+  const uint8_t *client_js_gz_{nullptr};
+  size_t client_js_gz_len_{0};
+  const uint8_t *popup_js_gz_{nullptr};
+  size_t popup_js_gz_len_{0};
+  void send_owned_(AsyncWebServerRequest *request, int code, const char *type, const std::string &body,
+                   const char *cache = nullptr);
   const uint8_t *html_gz_{nullptr};
   size_t html_gz_len_{0};
   ap_portal_core::Vars static_vars_;

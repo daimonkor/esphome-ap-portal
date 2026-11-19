@@ -1171,7 +1171,7 @@ void ApPortal::handleRequest(AsyncWebServerRequest *request) {
     }
     case ap_portal_core::Route::WRAP: {
       std::string body = ap_portal_core::render(WRAP_PAGE, this->page_vars_(c));
-      auto *r = request->beginResponse(200, "text/html", body);
+      auto *r = request->beginResponse(200, "text/html", reinterpret_cast<const uint8_t *>(body.data()), body.size());
       r->addHeader("Cache-Control", "no-store");
       request->send(r);
       return;
@@ -1206,7 +1206,8 @@ void ApPortal::HomeApi::handleRequest(AsyncWebServerRequest *request) {
 
 void ApPortal::send_wifi_page_(AsyncWebServerRequest *request, const Classified &c) {
   std::string body = ap_portal_core::render(BUILTIN_WIFI, this->page_vars_(c));
-  auto *r = request->beginResponse(200, "text/html", body);
+  // send() is synchronous: the body can be sent from where it is, without the response's own copy
+  auto *r = request->beginResponse(200, "text/html", reinterpret_cast<const uint8_t *>(body.data()), body.size());
   r->addHeader("Cache-Control", "no-store");
   request->send(r);
 }
@@ -1221,12 +1222,22 @@ void ApPortal::handle_api_(AsyncWebServerRequest *request, const Classified &c) 
     return;
   }
   if (p == a + "client.js" || p == a + "popup.js") {
+    // gzip-compressed at build time, sent straight from flash: built as one string the popup was
+    // ~22 KB of heap, twice over (the response copies it) — too much next to BLE on an ESP32-C3.
+    const bool popup = p == a + "popup.js";
+    const uint8_t *gz = popup ? this->popup_js_gz_ : this->client_js_gz_;
+    const size_t len = popup ? this->popup_js_gz_len_ : this->client_js_gz_len_;
+    if (gz != nullptr) {
+      auto *r = request->beginResponse(200, "application/javascript", gz, len);
+      r->addHeader("Content-Encoding", "gzip");
+      r->addHeader("Cache-Control", "max-age=300");
+      request->send(r);
+      return;
+    }
     std::string js(CLIENT_JS);
-    if (p == a + "popup.js")
+    if (popup)
       js += POPUP_JS;  // one file: the client, then the popup
-    auto *r = request->beginResponse(200, "application/javascript", js);
-    r->addHeader("Cache-Control", "max-age=300");
-    request->send(r);
+    send_owned_(request, 200, "application/javascript", js, "max-age=300");
     return;
   }
   if (!post) {
@@ -1373,7 +1384,7 @@ void ApPortal::send_networks_(AsyncWebServerRequest *request) {
     }
   }
   out += "]}";
-  auto *r = request->beginResponse(200, "application/json", out);
+  auto *r = request->beginResponse(200, "application/json", reinterpret_cast<const uint8_t *>(out.data()), out.size());
   r->addHeader("Cache-Control", "no-store");
   request->send(r);
 }
@@ -1478,12 +1489,21 @@ void ApPortal::send_landing_(AsyncWebServerRequest *request, const Classified &c
     request->send(r);
     return;
   }
-  const std::string &tpl = this->html_.empty() ? std::string(BUILTIN_LANDING) : this->html_;
+  const std::string_view tpl = this->html_.empty() ? std::string_view(BUILTIN_LANDING) : std::string_view(this->html_);
   std::string body = ap_portal_core::render(tpl, this->page_vars_(c));
   if (body.size() < 8)  // Android takes 200 with an (almost) empty body for "no portal"
     body.append("<!-- ap_portal -->");
-  auto *r = request->beginResponse(200, "text/html", body);
+  auto *r = request->beginResponse(200, "text/html", reinterpret_cast<const uint8_t *>(body.data()), body.size());
   r->addHeader("Cache-Control", "no-store");
+  request->send(r);
+}
+
+// Sends a body that lives in this call (send() is synchronous), without the response's own copy.
+void ApPortal::send_owned_(AsyncWebServerRequest *request, int code, const char *type, const std::string &body,
+                           const char *cache) {
+  auto *r = request->beginResponse(code, type, reinterpret_cast<const uint8_t *>(body.data()), body.size());
+  if (cache != nullptr)
+    r->addHeader("Cache-Control", cache);
   request->send(r);
 }
 

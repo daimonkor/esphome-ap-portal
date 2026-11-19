@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <cstring>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace ap_portal_core {
@@ -446,7 +447,7 @@ inline std::string trim(const std::string &s) {
 
 inline bool has_template_tags(const std::string &tpl) { return tpl.find("{{") != std::string::npos; }
 
-inline std::string render(const std::string &tpl, const Vars &vars) {
+inline std::string render(std::string_view tpl, const Vars &vars) {
   struct Block {
     bool parent;  // the enclosing block is shown
     bool cond;
@@ -473,7 +474,7 @@ inline std::string render(const std::string &tpl, const Vars &vars) {
       if (shown()) out.append(tpl, open, std::string::npos);
       break;
     }
-    const std::string tag = trim(tpl.substr(start, close - start));
+    const std::string tag = trim(std::string(tpl.substr(start, close - start)));
     i = close + (raw ? 3 : 2);
     if (!raw && (tag.compare(0, 4, "#if ") == 0 || tag.compare(0, 8, "#unless ") == 0)) {
       const bool unless = tag[1] == 'u';
