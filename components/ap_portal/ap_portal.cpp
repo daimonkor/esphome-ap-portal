@@ -1683,7 +1683,12 @@ void ApPortal::send_api_error_(AsyncWebServerRequest *request, const char *code,
 void ApPortal::send_networks_(AsyncWebServerRequest *request) {
   auto *w = wifi::global_wifi_component;
   std::string out = "{\"scanning\":";
-  out += this->scanning_ ? "true" : "false";
+  bool scan_asked;
+  {
+    std::lock_guard<std::mutex> g(this->mu_);
+    scan_asked = this->http_scan_;  // asked for, not started yet: the page locks from the first answer
+  }
+  out += this->scanning_ || scan_asked ? "true" : "false";
   wifi_ap_record_t info{};
   const bool connected = w->is_connected() && esp_wifi_sta_get_ap_info(&info) == ESP_OK;
   char esc[32 * JSON_ESCAPE_MAX_EXPANSION + 1];

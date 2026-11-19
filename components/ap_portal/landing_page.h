@@ -138,7 +138,7 @@ function load(){apPortal.networks().then(function(j){
   li.appendChild(a);li.appendChild(b);if(cur){li.className='cur';li.setAttribute('aria-disabled','true')}else{if(n.ssid==g('ss').value)li.className='sel';li.onclick=function(){if(LK.s||LK.w||LK.r)return;g('ss').value=n.ssid;g('pw').value='';g('pw').focus();load()}}ls.appendChild(li)});
  again(j.scanning?1500:5000)}).catch(function(){rfb(false);g('st').innerHTML='';var s=document.createElement('span');s.className='m';s.textContent=t('lost');g('st').appendChild(s);again(3000)})}
 var LK={s:false,w:false,r:false};function lock(){var on=LK.s||LK.w||LK.r,w=LK.w||LK.r;['cn','cl2','la','rf','ab','ar'].forEach(function(k){var b=g(k);if(b)b.disabled=on});['ss','pw','ap'].forEach(function(k){var i=g(k);if(i)i.disabled=w});g('ls').classList.toggle('off',on);var c=g('cn');c.innerHTML=(w?'<span class="sp"></span>':'')+esc(X.cn||'Connect now');g('bz').textContent=on?t(w?'bw':'bs'):''}function rfb(on){var b=g('rf');LK.s=on;b.innerHTML=on?'<span class="sp"></span>'+esc(X.ld||'Searching…'):esc(X.rf||'Search again');lock()}
-function scan(){if(LK.s||LK.w||LK.r)return;rfb(true);apPortal.scan().then(function(){again(800)},function(e){rfb(false);fail('cm',e.code||String(e.message||e))})}
+function scan(){if(LK.s||LK.w||LK.r)return;rfb(true);apPortal.scan().then(load,function(e){rfb(false);fail('cm',e.code||String(e.message||e))})}
 var tick=null;function busy(on){busy.on=on;LK.w=on;lock();
  clearInterval(tick);if(on)tick=setInterval(function(){var e=g('tc');if(e)e.textContent=Math.round((Date.now()-busy.t)/1000)+' s'},500)}
 function follow(p){busy.t=p.t;busy(true);toast('<b>'+t('going1')+' «'+esc(p.ssid)+'»… <span id="tc"></span></b><div class="m">'+t('going2')+'</div>'+addrs(p.addresses)+'<div class="m">'+t('phone')+'</div>',null,true);
@@ -267,9 +267,9 @@ function load(){if(!open)return;apPortal.networks().then(function(j){
  j.networks.forEach(function(n){var li=document.createElement('li');var cur=j.connected&&n.ssid==j.ssid;li.innerHTML='<span>'+esc(n.ssid)+(n.lock?'<span class="lk">🔒</span>':'')+(cur?'<span class="cu">✓ '+esc(X.cur)+'</span>':'')+'</span><span class="m">'+bars(n.rssi)+'</span>';
   if(cur){li.className='cur';li.setAttribute('aria-disabled','true')}else{if(n.ssid==$('#ss').value)li.className='sel';li.onclick=function(){if(LK.s||LK.w||LK.r)return;$('#ss').value=n.ssid;$('#pw').value='';$('#pw').focus();load()}}ls.appendChild(li)});
  if(open)again(j.scanning?1500:5000)}).catch(function(){if(!open)return;rfb(false);$('#st').innerHTML='<span class="m">'+esc(X.lost)+'</span>';again(3000)})}
-function show(v){open=v;$('#pw').value='';bg.classList.toggle('on',v);if(v){rfb(true);apPortal.scan().then(function(){again(800)},function(){});load()}else clearTimeout(lt)}
+function show(v){open=v;$('#pw').value='';bg.classList.toggle('on',v);if(v){rfb(true);apPortal.scan().then(load,load)}else clearTimeout(lt)}
 $('.fab').onclick=function(){show(true)};if(me&&me.dataset.button=='none')$('.fab').style.display='none';$('.x').onclick=function(){show(false)};bg.onclick=function(e){if(e.target===bg)show(false)};
-$('#rf').onclick=function(){if(LK.s||LK.w||LK.r)return;rfb(true);apPortal.scan().then(function(){again(800)},function(e){rfb(false);fail(e.code||String(e.message||e))})};
+$('#rf').onclick=function(){if(LK.s||LK.w||LK.r)return;rfb(true);apPortal.scan().then(load,function(e){rfb(false);fail(e.code||String(e.message||e))})};
 var tick=null;function busy(on){busy.on=on;LK.w=on;lock();
  clearInterval(tick);if(on)tick=setInterval(function(){var e=$('#tc');if(e)e.textContent=Math.round((Date.now()-busy.t)/1000)+' s'},500)}
 function follow(p){busy.t=p.t;busy(true);toast('<b>'+X.g1+' «'+esc(p.ssid)+'»… <span id="tc"></span></b><div class="m">'+X.g2+'</div>'+addrs(p.addresses)+'<div class="m">'+X.ph+'</div>',null,true);
