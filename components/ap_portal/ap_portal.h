@@ -324,6 +324,26 @@ class ApPortal : public Component, public AsyncWebHandler {
   std::atomic<uint8_t> sw_fails_{0};
   uint32_t sw_started_ms_{0};
   void log_switch_reasons_(const char *what);
+  // "While away" log: during a router switch the live log is out of reach (the device is on another
+  // network or none). Warnings, and Wi-Fi / ap_portal info lines, are kept in a small ring and
+  // written to the log again once the device is back and an API client (the dashboard, Home
+  // Assistant) listens — then a failed switch can be read afterwards.
+  struct AwayLine {
+    uint32_t ms;
+    char text[92];
+  };
+  static constexpr uint8_t AWAY_LINES = 20;
+  AwayLine away_[AWAY_LINES]{};
+  uint8_t away_head_{0};  // next slot; under away_mu_
+  uint8_t away_n_{0};
+  uint16_t away_lost_{0};
+  std::mutex away_mu_;
+  std::atomic<bool> away_rec_{false};
+  uint32_t away_since_{0};
+  uint32_t away_back_ms_{0};
+  void away_log_(uint8_t level, const char *tag, const char *msg, size_t len);
+  void away_start_(uint32_t now);
+  void away_tick_(bool router, uint32_t now);
   bool http_ap_pw_pending_{false};
   bool http_ap_pw_reset_{false};
   std::string http_ap_pw_;

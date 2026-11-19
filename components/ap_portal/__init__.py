@@ -548,6 +548,11 @@ async def to_code(config):
     from esphome.components import wifi
 
     wifi.enable_runtime_roaming_suppression()  # ap_portal.scan pauses ESPHome's roaming scans
+    if "logger" in CORE.config:
+        # the "log while away" ring: a failed router switch can be read once the device is back
+        from esphome.components.logger import request_log_listener
+
+        request_log_listener()
     if config[CONF_API][CONF_ENABLED]:
         # The network list needs every scan record, not only the configured network's (ESPHome
         # otherwise filters them and, with one network, scans for its SSID alone); the HTTP

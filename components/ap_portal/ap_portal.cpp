@@ -20,6 +20,12 @@
 #include "esphome/core/hal.h"
 #include "esphome/core/helpers.h"
 #include "esphome/core/log.h"
+#ifdef USE_LOGGER
+#include "esphome/components/logger/logger.h"
+#endif
+#ifdef USE_API
+#include "esphome/components/api/api_server.h"
+#endif
 
 namespace esphome::ap_portal {
 
@@ -131,6 +137,13 @@ struct PasswordRecord {
 
 void ApPortal::setup() {
   this->boot_ms_ = millis();
+#ifdef USE_LOGGER
+  if (logger::global_logger != nullptr)
+    logger::global_logger->add_log_callback(
+        this, [](void *self, uint8_t level, const char *tag, const char *msg, size_t len) {
+          static_cast<ApPortal *>(self)->away_log_(level, tag, msg, len);
+        });
+#endif
   this->home_api_.parent = this;
   if (this->reset_pin_ != nullptr)
     this->reset_pin_->setup();
@@ -445,8 +458,10 @@ void ApPortal::drain_events_() {
       ESP_LOGD(TAG, "Gate: pass for %s (%s)", mac_str(ev.mac).c_str(), ip_str(ev.ip).c_str());
       this->on_enter_.call(mac_str(ev.mac), ip_str(ev.ip));
     } else if (ev.type == EV_AP_STOP) {
-      if (this->running_)
+      if (this->running_) {
         this->ap_stopped_by_esphome_ = true;
+        ESP_LOGW(TAG, "Access point stopped (clients dropped)");
+      }
     }
   }
 }
@@ -816,6 +831,7 @@ void ApPortal::switch_start_(const std::string &ssid, const std::string &psk, ui
   this->switch_target_ = ssid;
   this->sw_fails_ = 0;
   this->sw_started_ms_ = now;
+  this->away_start_(now);
   this->switch_pending_ = true;
   this->switch_deadline_ = now + this->fb_timeout_;
   this->switch_reconnect_(ssid, psk);
@@ -837,6 +853,82 @@ void ApPortal::switch_reconnect_(const std::string &ssid, const std::string &psk
   ESP_LOGD(TAG, "Wi-Fi page: scan results dropped, ESPHome scans for '%s'", ssid.c_str());
   if (was_connected)
     esp_wifi_disconnect();
+}
+
+// ───────────────────────────── log while away ─────────────────────────────
+
+void ApPortal::away_log_(uint8_t level, const char *tag, const char *msg, size_t len) {
+  if (!this->away_rec_.load(std::memory_order_relaxed) || tag == nullptr)
+    return;
+  const bool wifi_tag = std::strncmp(tag, "wifi", 4) == 0 || std::strcmp(tag, TAG) == 0;
+  if (!(level <= ESPHOME_LOG_LEVEL_WARN || (wifi_tag && level <= ESPHOME_LOG_LEVEL_INFO)))
+    return;
+  AwayLine line{};
+  line.ms = millis();
+  size_t o = 0;
+  for (size_t i = 0; i < len && msg[i] != 0 && o + 1 < sizeof(line.text); i++) {
+    if (msg[i] == '\033') {  // colour codes: ESC [ ... m
+      while (i < len && msg[i] != 'm')
+        i++;
+      continue;
+    }
+    if (msg[i] == '\n' || msg[i] == '\r')
+      continue;
+    line.text[o++] = msg[i];
+  }
+  std::lock_guard<std::mutex> g(this->away_mu_);
+  this->away_[this->away_head_] = line;
+  this->away_head_ = (this->away_head_ + 1) % AWAY_LINES;
+  if (this->away_n_ < AWAY_LINES)
+    this->away_n_++;
+  else
+    this->away_lost_++;
+}
+
+void ApPortal::away_start_(uint32_t now) {
+  if (!this->away_rec_)
+    this->away_since_ = now;  // a second switch while away keeps the earlier lines
+  this->away_back_ms_ = 0;
+  this->away_rec_ = true;
+}
+
+void ApPortal::away_tick_(bool router, uint32_t now) {
+  if (!this->away_rec_)
+    return;
+  if (!router || this->switch_pending_) {
+    this->away_back_ms_ = 0;
+    return;
+  }
+  if (this->away_back_ms_ == 0)
+    this->away_back_ms_ = now ? now : 1;
+  if (!ap_portal_core::elapsed(now, this->away_back_ms_, 15000))
+    return;  // the dashboard's log reconnects meanwhile
+#ifdef USE_API
+  if (api::global_api_server != nullptr && !api::global_api_server->is_connected()) {
+    if (!ap_portal_core::elapsed(now, this->away_since_, 30UL * 60UL * 1000UL))
+      return;  // nobody listens (another network): keep the lines until someone does
+  }
+#endif
+  this->away_rec_ = false;
+  AwayLine lines[AWAY_LINES];
+  uint8_t n;
+  uint16_t lost;
+  {
+    std::lock_guard<std::mutex> g(this->away_mu_);
+    n = this->away_n_;
+    lost = this->away_lost_;
+    const uint8_t first = (this->away_head_ + AWAY_LINES - n) % AWAY_LINES;
+    for (uint8_t i = 0; i < n; i++)
+      lines[i] = this->away_[(first + i) % AWAY_LINES];
+    this->away_n_ = 0;
+    this->away_head_ = 0;
+    this->away_lost_ = 0;
+  }
+  if (n == 0)
+    return;
+  ESP_LOGI(TAG, "Log while away (router switch), %u line(s)%s:", (unsigned) n, lost ? ", older ones dropped" : "");
+  for (uint8_t i = 0; i < n; i++)
+    ESP_LOGI(TAG, "  +%5.1f s %s", (lines[i].ms - this->away_since_) / 1000.0f, lines[i].text);
 }
 
 void ApPortal::log_switch_reasons_(const char *what) {
@@ -1506,6 +1598,7 @@ void ApPortal::http_requests_tick_(uint32_t now) {
     this->later_cancel_();
   this->later_tick_(now);
   this->switch_tick_(now);
+  this->away_tick_(wifi::global_wifi_component->is_connected(), now);
   this->fallback_tick_(now);
   if (ap_pw) {
     if (ap_reset)
