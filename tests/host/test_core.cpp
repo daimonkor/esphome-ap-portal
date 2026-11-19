@@ -510,7 +510,69 @@ static void test_csrf() {
   CHECK(post_allowed(true, "http://100.64.4.1", "100.64.4.1", "same-origin"));
 }
 
+
+static uint32_t ipbe(unsigned a, unsigned b, unsigned c, unsigned d) { return a | (b << 8) | (c << 16) | (d << 24); }
+
+static void test_cors() {
+  using ap_portal_core::cors_allowed;
+  using ap_portal_core::own_origin_ip;
+  const uint32_t ap = ipbe(100, 64, 4, 1), sta = ipbe(192, 168, 1, 89), prev = ipbe(10, 1, 30, 117);
+  const std::string host = "move-sensor-ble-148f98";
+  auto ok = [&](const char *o) { return cors_allowed(o, ap, host, sta, prev); };
+  CHECK(own_origin_ip(ap) == "http://100.64.4.1");
+  CHECK(own_origin_ip(0) == "");
+  // the device's own pages
+  CHECK(ok("http://100.64.4.1"));
+  CHECK(ok("http://move-sensor-ble-148f98.local"));
+  CHECK(ok("HTTP://Move-Sensor-BLE-148F98.LOCAL"));   // case does not matter
+  CHECK(ok("http://192.168.1.89"));
+  CHECK(ok("http://10.1.30.117"));                    // the page that switched routers, on the old address
+  // attacks: other sites
+  CHECK(!ok(""));
+  CHECK(!ok("null"));
+  CHECK(!ok("https://evil.example"));
+  CHECK(!ok("http://evil.example"));
+  CHECK(!ok("http://localhost"));
+  CHECK(!ok("http://127.0.0.1"));
+  CHECK(!ok("file://"));
+  CHECK(!ok("chrome-extension://abcdef"));
+  // look-alike names and addresses
+  CHECK(!ok("http://move-sensor-ble-148f98.local.evil.com"));
+  CHECK(!ok("http://evil-move-sensor-ble-148f98.local"));
+  CHECK(!ok("http://move-sensor-ble-148f98.local."));
+  CHECK(!ok("http://move-sensor-ble-148f98"));
+  CHECK(!ok("http://other-device.local"));
+  CHECK(!ok("http://move-sensor-ble-148f98.local@evil.com"));
+  CHECK(!ok("http://evil.com#http://move-sensor-ble-148f98.local"));
+  CHECK(!ok("http://192.168.1.8"));                    // prefix of ours
+  CHECK(!ok("http://192.168.1.890"));
+  CHECK(!ok("http://192.168.1.89.evil.com"));
+  CHECK(!ok("http://192.168.1.50"));                   // another host on the LAN
+  CHECK(!ok("http://100.64.4.2"));                     // another access point client
+  CHECK(!ok("http://3232235865"));                     // 192.168.1.89 as a number
+  CHECK(!ok("http://0xc0a80159"));
+  CHECK(!ok("http://[::ffff:192.168.1.89]"));
+  // scheme and port
+  CHECK(!ok("https://192.168.1.89"));
+  CHECK(!ok("https://move-sensor-ble-148f98.local"));
+  CHECK(!ok("http://192.168.1.89:8080"));
+  CHECK(!ok("http://192.168.1.89:80"));                // browsers never send :80; exact match only
+  CHECK(!ok("ws://192.168.1.89"));
+  CHECK(!ok(" http://192.168.1.89"));
+  CHECK(!ok("http://192.168.1.89 "));
+  CHECK(!ok("http://192.168.1.89/"));
+  CHECK(!cors_allowed(std::string("http://192.168.1.89\0.evil", 25), ap, host, sta, prev));
+  CHECK(!ok(("http://" + std::string(100, 'a') + ".local").c_str()));
+  // unknown addresses never match: no router, no previous one, no access point
+  CHECK(!cors_allowed("http://0.0.0.0", ap, host, 0, 0));
+  CHECK(!cors_allowed("http://0.0.0.0", 0, host, 0, 0));
+  CHECK(!cors_allowed("http://.local", ap, "", sta, prev));
+  CHECK(!cors_allowed("http://192.168.1.89", ap, host, 0, 0));   // not the router address any more
+  CHECK(cors_allowed("http://192.168.1.89", 0, host, sta, 0));
+}
+
 int main() {
+  test_cors();
   test_csrf();
   test_timers();
   test_hosts();

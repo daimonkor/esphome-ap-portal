@@ -247,6 +247,8 @@ class ApPortal : public Component, public AsyncWebHandler, public wifi::WiFiScan
   const uint8_t *popup_js_gz_{nullptr};
   size_t popup_js_gz_len_{0};
   const char *js_etag_{nullptr};  // build hash: the browser revalidates, gets 304 until a reflash
+  // Access-Control-Allow-Origin for our own answers (cors_allowed); hold keeps the value alive until send()
+  void cors_(AsyncWebServerRequest *request, AsyncWebServerResponse *response, std::string &hold);
   void send_owned_(AsyncWebServerRequest *request, int code, const char *type, const std::string &body,
                    const char *cache = nullptr);
   const uint8_t *html_gz_{nullptr};
@@ -325,6 +327,9 @@ class ApPortal : public Component, public AsyncWebHandler, public wifi::WiFiScan
   std::atomic<uint8_t> sw_streak_{0};          // same error kind in a row (switch_hopeless)
   std::atomic<uint8_t> sw_last_reason_{0};
   std::atomic<bool> sw_fresh_connect_{false};  // STA_CONNECTED seen since the switch started
+  // Router-side addresses for the CORS check (web server task reads them): now and the one before.
+  std::atomic<uint32_t> sta_ip_now_{0};
+  std::atomic<uint32_t> sta_ip_prev_{0};
   std::string switch_new_psk_;                 // same SSID, new password: still a switch to check
   std::string switch_error_;                   // latched error kind of a reverted switch (under mu_)
   uint32_t scan_list_ms_{0};                   // when ESPHome's scan list was last refreshed (0 = never)

@@ -268,6 +268,15 @@ void ApPortal::loop() {
     }
   }
   const bool router = w->is_connected();
+  if (router) {
+    esp_netif_t *sn = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    esp_netif_ip_info_t si{};
+    if (sn != nullptr && esp_netif_get_ip_info(sn, &si) == ESP_OK && si.ip.addr != 0 &&
+        si.ip.addr != this->sta_ip_now_.load()) {
+      this->sta_ip_prev_ = this->sta_ip_now_.load();  // a page opened on the old address still polls <host>.local
+      this->sta_ip_now_ = si.ip.addr;
+    }
+  }
   this->reboot_tick_(router, now);
   if (!this->running_)
     return;
@@ -1463,6 +1472,8 @@ void ApPortal::handleRequest(AsyncWebServerRequest *request) {
       std::string body = ap_portal_core::render(WRAP_PAGE, this->page_vars_(c));
       auto *r = request->beginResponse(200, "text/html", reinterpret_cast<const uint8_t *>(body.data()), body.size());
       r->addHeader("Cache-Control", "no-store");
+      std::string cors_hold;
+      this->cors_(request, r, cors_hold);
       request->send(r);
       return;
     }
@@ -1499,6 +1510,8 @@ void ApPortal::send_wifi_page_(AsyncWebServerRequest *request, const Classified 
   // send() is synchronous: the body can be sent from where it is, without the response's own copy
   auto *r = request->beginResponse(200, "text/html", reinterpret_cast<const uint8_t *>(body.data()), body.size());
   r->addHeader("Cache-Control", "no-store");
+  std::string cors_hold;
+  this->cors_(request, r, cors_hold);
   request->send(r);
 }
 
@@ -1537,6 +1550,8 @@ void ApPortal::handle_api_(AsyncWebServerRequest *request, const Classified &c) 
       r->addHeader("Cache-Control", "no-cache");
       if (this->js_etag_ != nullptr)
         r->addHeader("ETag", this->js_etag_);
+      std::string cors_hold;
+      this->cors_(request, r, cors_hold);
       request->send(r);
       return;
     }
@@ -1618,6 +1633,8 @@ void ApPortal::handle_api_(AsyncWebServerRequest *request, const Classified &c) 
     return;
   }
   auto *ok = request->beginResponse(200, "application/json", std::string("{\"ok\":true}"));
+  std::string cors_hold;
+  this->cors_(request, ok, cors_hold);
   request->send(ok);
 }
 
@@ -1626,6 +1643,8 @@ void ApPortal::send_api_error_(AsyncWebServerRequest *request, const char *code,
   std::string body = std::string("{\"error\":\"") + code + "\"}";
   if (status == 400) {
     auto *r = request->beginResponse(400, "application/json", body);
+    std::string cors_hold;
+    this->cors_(request, r, cors_hold);
     request->send(r);
     return;
   }
@@ -1727,6 +1746,8 @@ void ApPortal::send_networks_(AsyncWebServerRequest *request) {
   out += "]}";
   auto *r = request->beginResponse(200, "application/json", reinterpret_cast<const uint8_t *>(out.data()), out.size());
   r->addHeader("Cache-Control", "no-store");
+  std::string cors_hold;
+  this->cors_(request, r, cors_hold);
   request->send(r);
 }
 
@@ -1829,6 +1850,8 @@ void ApPortal::send_landing_(AsyncWebServerRequest *request, const Classified &c
     auto *r = request->beginResponse(200, "text/html", this->html_gz_, this->html_gz_len_);
     r->addHeader("Content-Encoding", "gzip");
     r->addHeader("Cache-Control", "no-store");
+    std::string cors_hold;
+    this->cors_(request, r, cors_hold);
     request->send(r);
     return;
   }
@@ -1838,7 +1861,28 @@ void ApPortal::send_landing_(AsyncWebServerRequest *request, const Classified &c
     body.append("<!-- ap_portal -->");
   auto *r = request->beginResponse(200, "text/html", reinterpret_cast<const uint8_t *>(body.data()), body.size());
   r->addHeader("Cache-Control", "no-store");
+  std::string cors_hold;
+  this->cors_(request, r, cors_hold);
   request->send(r);
+}
+
+// ESPHome adds "Access-Control-Allow-Origin: *" to every answer; a header of the same name set here
+// replaces it. The asking page's Origin goes back only when it is one of the device's own addresses
+// (ap_portal_core::cors_allowed), anything else gets the access point's origin and the browser refuses
+// the read. hold must live until request->send(): the header value is not copied.
+void ApPortal::cors_(AsyncWebServerRequest *request, AsyncWebServerResponse *response, std::string &hold) {
+  auto o = request->get_header("Origin");
+  const uint32_t ap = this->ap_ip_be_();
+  if (o.has_value() &&
+      ap_portal_core::cors_allowed(*o, ap, this->host_, this->sta_ip_now_.load(), this->sta_ip_prev_.load())) {
+    hold = *o;
+  } else {
+    hold = ap_portal_core::own_origin_ip(ap);
+    if (hold.empty())
+      hold = "http://" + this->host_ + ".local";
+  }
+  response->addHeader("Access-Control-Allow-Origin", hold.c_str());
+  response->addHeader("Vary", "Origin");
 }
 
 // Sends a body that lives in this call (send() is synchronous), without the response's own copy.
@@ -1847,6 +1891,8 @@ void ApPortal::send_owned_(AsyncWebServerRequest *request, int code, const char 
   auto *r = request->beginResponse(code, type, reinterpret_cast<const uint8_t *>(body.data()), body.size());
   if (cache != nullptr)
     r->addHeader("Cache-Control", cache);
+  std::string cors_hold;
+  this->cors_(request, r, cors_hold);
   request->send(r);
 }
 

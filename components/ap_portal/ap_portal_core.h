@@ -12,6 +12,7 @@
 //  * strings      — SSID with a MAC suffix, AP password rules
 
 #include <cstddef>
+#include <cstdio>
 #include <cstdint>
 #include <cstring>
 #include <cctype>
@@ -759,6 +760,38 @@ inline bool post_allowed(bool has_header, const std::string &origin, const std::
       return false;
   }
   return true;
+}
+
+
+// ── Who may READ ap_portal's answers from another page (CORS) ──
+// ESPHome's web server answers everything with "Access-Control-Allow-Origin: *": any web page open
+// in a browser on the home network (or on an access point client with mobile data) could read the
+// networks JSON, the landing and the Wi-Fi page — router SSID, addresses, nearby networks. ap_portal
+// answers with the asking page's Origin only when it is one of the device's own addresses:
+//   http://<access point IP>, http://<host>.local, http://<router IP>, http://<previous router IP>
+// (the page that switched routers polls <host>.local from the address it was opened on); anything
+// else gets the access point's own origin, which the browser does not match — the read is refused.
+// Plain http, default port only (browsers leave :80 out of Origin), whole-string match.
+inline std::string own_origin_ip(uint32_t ip_be) {
+  if (ip_be == 0)
+    return "";
+  char b[24];
+  std::snprintf(b, sizeof(b), "http://%u.%u.%u.%u", (unsigned) (ip_be & 0xFF), (unsigned) ((ip_be >> 8) & 0xFF),
+                (unsigned) ((ip_be >> 16) & 0xFF), (unsigned) (ip_be >> 24));
+  return b;
+}
+
+inline bool cors_allowed(const std::string &origin, uint32_t ap_ip_be, const std::string &host, uint32_t sta_ip_be,
+                         uint32_t prev_sta_ip_be) {
+  if (origin.empty() || origin.size() > 80)
+    return false;
+  const std::string o = host_lower(origin);
+  if (!host.empty() && o == "http://" + host_lower(host) + ".local")
+    return true;
+  for (uint32_t ip : {ap_ip_be, sta_ip_be, prev_sta_ip_be})
+    if (ip != 0 && o == own_origin_ip(ip))
+      return true;
+  return false;
 }
 
 }  // namespace ap_portal_core

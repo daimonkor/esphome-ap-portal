@@ -2,6 +2,19 @@
 
 Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monitor) run on the library.
 
+## 0.1.2 — 2026-11-19
+
+### Security
+- Reading the API from another web page: ESPHome answers everything with
+  `Access-Control-Allow-Origin: *`, so any site open in a browser on the home network (or on an
+  access point client with mobile data) could read `/ap_portal/networks`, the landing and the Wi-Fi
+  page — the router SSID, the device's addresses, the access point SSID, nearby networks. ap_portal's
+  own answers now allow only the device's own pages: `http://<access point IP>`, `http://<host>.local`,
+  `http://<router IP>` and the router IP before the last change (the page that switched routers polls
+  `<host>.local` from the address it was opened on). Any other origin gets the access point's own
+  origin back and the browser refuses the read; `Vary: Origin` keeps caches apart. ESPHome's own pages
+  (`/`, `/events`, entity URLs) are not ap_portal's and keep ESPHome's header.
+
 ## 0.1.1 — 2026-11-19
 
 ### Security

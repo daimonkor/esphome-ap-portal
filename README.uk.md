@@ -44,7 +44,7 @@ web_server:
   local: true                   # сторінка працює без інтернету
 
 external_components:
-  - source: github://daimonkor/esphome-ap-portal@v0.1.1
+  - source: github://daimonkor/esphome-ap-portal@v0.1.2
     components: [ap_portal]
 
 ap_portal:
@@ -144,7 +144,7 @@ ap_portal:
 `ap_password_length`), проміс відхиляється з `Error.code`; `apPortal.check.ssid()/.psk()/.apPassword()`
 перевіряють те саме до надсилання.
 За замовчуванням API доступний лише клієнтам точки доступу; `api: {from_home: true}` відкриває його
-й домашній мережі (під логіном `web_server`, якщо його задано). Кожен POST має нести заголовок `X-AP-Portal: 1` (`client.js` / `popup.js` надсилають його самі) і, якщо браузер надіслав `Origin`, іти з адреси самого пристрою; інакше `403` `{"error":"forbidden"}` — чужа веб-сторінка не змінить роутер і пароль точки.
+й домашній мережі (під логіном `web_server`, якщо його задано). Кожен POST має нести заголовок `X-AP-Portal: 1` (`client.js` / `popup.js` надсилають його самі) і, якщо браузер надіслав `Origin`, іти з адреси самого пристрою; інакше `403` `{"error":"forbidden"}` — чужа веб-сторінка не змінить роутер і пароль точки. Читати відповіді ap_portal теж можуть лише сторінки самого пристрою (`http://<IP точки>`, `http://<host>.local`, IP у мережі роутера й попередній) — замість `Access-Control-Allow-Origin: *` від ESPHome.
 
 ### Точка доступу не гасне при підключенні до роутера
 
