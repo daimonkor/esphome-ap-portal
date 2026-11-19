@@ -41,8 +41,8 @@ s('t',x[0]);{{#if primary_default}}s('p',x[1]);{{/if}}s('oa',x[2]);s('o1',x[3]);
 function copyText(t){try{if(navigator.clipboard&&window.isSecureContext){navigator.clipboard.writeText(t);return}}catch(e){}var a=document.createElement('textarea');a.value=t;a.setAttribute('readonly','');a.style.cssText='position:fixed;top:0;left:0;opacity:0';document.body.appendChild(a);a.select();a.setSelectionRange(0,t.length);try{document.execCommand('copy')}catch(e){}document.body.removeChild(a)}
 function onCopy(root,label){root.addEventListener('click',function(e){var a=e.target.closest&&e.target.closest('a.cp');if(!a)return;e.preventDefault();copyText(a.getAttribute('data-copy'));var o=a.textContent;a.textContent='\u2713 '+label;setTimeout(function(){a.textContent=o},1800)})}
 onCopy(document,(T[L]||[])[8]||'Copied');
-// The sign-in window is a cut-down browser. Its main button opens the page right there and copies
-// the device's address, marked on its link below (so it is not lost). Android's (a WebView) also gets "Open in the browser ↗" — an
+// The sign-in window is a cut-down browser; the main button opens the page right there (a tap on an
+// address below copies it). Android's (a WebView) also gets "Open in the browser ↗" — an
 // intent:// link to the phone's browser; after it the sign-in prompt does not come back, which the
 // note under it says. Apple's (iPhone, iPad, Mac) cannot open Safari on a network without internet.
 (function(){var ua=navigator.userAgent,p=document.getElementById('p'),ib=document.getElementById('ib'),
@@ -50,11 +50,6 @@ onCopy(document,(T[L]||[])[8]||'Copied');
  var droid=/Android/i.test(ua)&&/; wv\)/.test(ua),apple=/iPhone|iPad|iPod|Macintosh/.test(ua)&&!/Safari\/|Chrome|Firefox|Edg/.test(ua);
  if(!p||!(droid||apple))return;
  var abs=function(){try{return new URL(p.getAttribute('href'),location.href)}catch(e){return null}};
- // The button opens the page here; the device's address is copied and its link below shows
- // "✓ Copied", as a tap on the link itself does.
- p.onclick=function(e){var u=abs();if(!u)return;e.preventDefault();var a=document.querySelector('a.cp');
-  if(a){copyText(a.getAttribute('data-copy'));a.textContent='✓ '+(x[8]||'Copied')}
-  setTimeout(function(){location.href=u.href},900)};
  if(apple&&ib)ib.style.display='block';
  if(!droid||!br)return;
  br.style.display='block';if(bh)bh.style.display='block';
