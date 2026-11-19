@@ -324,6 +324,12 @@ class ApPortal : public Component, public AsyncWebHandler {
   std::atomic<uint8_t> sw_fails_{0};
   uint32_t sw_started_ms_{0};
   void log_switch_reasons_(const char *what);
+  bool leave_pending_{false};
+  std::string leave_ssid_;
+  bool prefer_scan_entry_(const std::string &ssid);
+  void drop_scan_list_(const std::string &ssid);
+  uint32_t leave_at_{0};
+  void leave_tick_(uint32_t now);
   // "While away" log: during a router switch the live log is out of reach (the device is on another
   // network or none). Warnings, and Wi-Fi / ap_portal info lines, are kept in a small ring and
   // written to the log again once the device is back and an API client (the dashboard, Home

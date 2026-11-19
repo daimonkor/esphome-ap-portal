@@ -125,6 +125,7 @@ template struct ReleaseScanRobber<ReleaseScanTag, &wifi::WiFiComponent::release_
 static constexpr uint32_t PASSWORD_APPLY_DELAY_MS = 2000;  // the HTTP answer leaves first
 static constexpr uint32_t SCAN_TIMEOUT_MS = 20000;
 static constexpr uint32_t SCAN_RETRY_MS = 2000;
+static constexpr uint32_t LEAVE_SCAN_WAIT_MS = 8000;  // longest wait for the scan before a switch
 static constexpr uint32_t LAMBDA_REFRESH_MS = 1000;
 static constexpr uint32_t PASSWORD_MAGIC = 0xA9F0C0DE;
 struct PasswordRecord {
@@ -845,14 +846,84 @@ void ApPortal::switch_reconnect_(const std::string &ssid, const std::string &psk
   auto *w = wifi::global_wifi_component;
   const bool was_connected = w->is_connected();
   w->save_wifi_sta(ssid, psk);  // saved by ESPHome, kept across reboots; reconnects only if not connected
-  // Stale scan results would send the first attempt to the old network (see ReleaseScanTag). The
-  // release honours keep_scan_results, which the network list sets, so it is lifted for the call.
+  // ESPHome's first attempt goes to the first entry of its scan list without scanning again (see
+  // ReleaseScanTag). Put the new network's strongest access point there: the device goes straight
+  // to it, with no scan of ESPHome's own — that one leaves the access point's channel for seconds
+  // and phones lost the access point (2026-11-19).
+  if (this->prefer_scan_entry_(ssid)) {
+    if (was_connected)
+      esp_wifi_disconnect();
+    return;
+  }
+  if (was_connected) {
+    // Not in the list: our background scan first (the radio returns to the access point's channel
+    // between channels), then leave the old router — see leave_tick_().
+    this->leave_ssid_ = ssid;
+    this->leave_pending_ = true;
+    this->leave_at_ = millis() + LEAVE_SCAN_WAIT_MS;
+    if (!this->scanning_)
+      this->scan_start_();
+    ESP_LOGD(TAG, "Wi-Fi page: '%s' not in the scan list, scanning before leaving the router", ssid.c_str());
+    return;
+  }
+  this->drop_scan_list_(ssid);  // not connected: ESPHome scans in its connect cycle anyway
+}
+
+// The strongest visible entry for `ssid` first in ESPHome's scan list, marked as matching; every
+// other entry unmarked. False when the list has no such entry. Entries are swapped bytewise, as
+// ESPHome's own sort does (WiFiScanResult has no default constructor).
+bool ApPortal::prefer_scan_entry_(const std::string &ssid) {
+  auto *w = wifi::global_wifi_component;
+  wifi::ScanResultsLock lock(w);
+  auto &list = const_cast<wifi::wifi_scan_vector_t<wifi::WiFiScanResult> &>(w->get_scan_result());
+  const size_t n = list.size();
+  int best = -1;
+  for (size_t i = 0; i < n; i++) {
+    const auto &r = list[i];
+    const auto s = r.get_ssid();
+    if (r.get_is_hidden() || s.size() != ssid.size() || std::memcmp(s.c_str(), ssid.data(), ssid.size()) != 0)
+      continue;
+    if (best < 0 || r.get_rssi() > list[best].get_rssi())
+      best = (int) i;
+  }
+  if (best < 0)
+    return false;
+  for (size_t i = 0; i < n; i++)
+    list[i].set_matches(false);
+  if (best != 0) {
+    alignas(wifi::WiFiScanResult) uint8_t tmp[sizeof(wifi::WiFiScanResult)];
+    std::memcpy(tmp, static_cast<void *>(&list[0]), sizeof(tmp));
+    std::memcpy(static_cast<void *>(&list[0]), static_cast<void *>(&list[best]), sizeof(tmp));
+    std::memcpy(static_cast<void *>(&list[best]), tmp, sizeof(tmp));
+  }
+  list[0].set_matches(true);
+  ESP_LOGD(TAG, "Wi-Fi page: '%s' first in the scan list (channel %u, %d dBm)", ssid.c_str(),
+           (unsigned) list[0].get_channel(), (int) list[0].get_rssi());
+  return true;
+}
+
+void ApPortal::drop_scan_list_(const std::string &ssid) {
+  auto *w = wifi::global_wifi_component;
+  // The release honours keep_scan_results, which the network list sets, so it is lifted for the call.
   w->set_keep_scan_results(false);
   (w->*release_scan_member(ReleaseScanTag{}))();
   w->set_keep_scan_results(this->route_.api);  // codegen asks to keep them when the API is on
-  ESP_LOGD(TAG, "Wi-Fi page: scan results dropped, ESPHome scans for '%s'", ssid.c_str());
-  if (was_connected)
+  ESP_LOGD(TAG, "Wi-Fi page: '%s' not in the scan list, list dropped, ESPHome scans", ssid.c_str());
+}
+
+// The switch leaves the old router once the background scan for the new network is done.
+void ApPortal::leave_tick_(uint32_t now) {
+  if (!this->leave_pending_)
+    return;
+  if ((this->scanning_ || this->scan_retry_at_ != 0) && !ap_portal_core::reached(now, this->leave_at_))
+    return;  // the scan runs (or retries after a busy radio)
+  this->leave_pending_ = false;
+  if (!this->prefer_scan_entry_(this->leave_ssid_))
+    this->drop_scan_list_(this->leave_ssid_);
+  if (wifi::global_wifi_component->is_connected()) {
+    ESP_LOGD(TAG, "Wi-Fi page: leaving the router");
     esp_wifi_disconnect();
+  }
 }
 
 // ───────────────────────────── log while away ─────────────────────────────
@@ -1597,6 +1668,7 @@ void ApPortal::http_requests_tick_(uint32_t now) {
   else if (later_cmd == 2 && this->later_pending_)
     this->later_cancel_();
   this->later_tick_(now);
+  this->leave_tick_(now);
   this->switch_tick_(now);
   this->away_tick_(wifi::global_wifi_component->is_connected(), now);
   this->fallback_tick_(now);
