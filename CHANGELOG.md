@@ -2,7 +2,7 @@
 
 Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monitor) run on the library.
 
-## Unreleased
+## 0.1.4 — 2026-11-20
 
 ### Changed
 - `ap_mode` is renamed to `ap_raise: always | without_router` (was `always | fallback`): next to
