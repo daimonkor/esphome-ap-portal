@@ -113,7 +113,7 @@ function load(){apPortal.networks().then(function(j){
  var ls=g('ls');ls.innerHTML='';if(!j.networks.length){var e=document.createElement('li');e.className='m';e.textContent=j.scanning?(X.ld||'Searching…'):t('empty');ls.appendChild(e)}
  j.networks.forEach(function(n){var li=document.createElement('li');var a=document.createElement('span');a.textContent=n.ssid;if(n.lock){var l=document.createElement('span');l.className='lk';l.textContent='🔒';a.appendChild(l)}var b=document.createElement('span');b.className='m';b.textContent=bars(n.rssi);
   li.appendChild(a);li.appendChild(b);if(n.ssid==g('ss').value)li.className='sel';li.onclick=function(){g('ss').value=n.ssid;g('pw').focus();load()};ls.appendChild(li)});
- if(j.scanning)again(1500)}).catch(function(){g('st').innerHTML='';var s=document.createElement('span');s.className='m';s.textContent=t('lost');g('st').appendChild(s);again(3000)})}
+ again(j.scanning?1500:5000)}).catch(function(){g('st').innerHTML='';var s=document.createElement('span');s.className='m';s.textContent=t('lost');g('st').appendChild(s);again(3000)})}
 function scan(){apPortal.scan().then(function(){again(800)},function(e){fail('cm',e.code||String(e.message||e))})}
 var tick=null;function busy(on){var b=g('cn');b.disabled=on;b.innerHTML=on?'<span class="sp"></span>'+esc(X.cn||'Connect now'):esc(X.cn||'Connect now');
  clearInterval(tick);if(on)tick=setInterval(function(){var e=g('tc');if(e)e.textContent=Math.round((Date.now()-busy.t)/1000)+' s'},500)}
@@ -140,6 +140,7 @@ function appw(){clr('am');var p=g('ap').value,c=apPortal.check.apPassword(p);if(
 function aprs(){apPortal.resetApPassword().then(function(){g('am').textContent=t('saved')}).catch(function(e){g('am').textContent=String(e.message||e)})}
 function eyes(root){var o='<svg viewBox="0 0 24 24"><path d="M12 5C7 5 2.7 8.1 1 12c1.7 3.9 6 7 11 7s9.3-3.1 11-7c-1.7-3.9-6-7-11-7zm0 11.5a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9zm0-7a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z"/></svg>',c='<svg viewBox="0 0 24 24"><path d="M12 5C7 5 2.7 8.1 1 12c1.7 3.9 6 7 11 7s9.3-3.1 11-7c-1.7-3.9-6-7-11-7zm0 11.5a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9zm0-7a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z"/><path d="M3.3 2 22 20.7 20.7 22 2 3.3z"/></svg>';[].forEach.call(root.querySelectorAll('button.ey'),function(b){var i=b.previousElementSibling;b.innerHTML=o;b.onclick=function(){var h=i.type=='password';i.type=h?'text':'password';b.innerHTML=h?c:o;i.focus()}})}
 eyes(document);load();scan();(function(){var p=apPortal.pending.load();if(p)follow(p)})();
+document.addEventListener('visibilitychange',function(){if(!document.hidden)load()});window.addEventListener('online',function(){load()});
 </script></body></html>
 )HTML";
 
@@ -171,7 +172,7 @@ var P={base:'',
 check:{ssid:function(s){return !s?'ssid_empty':bytes(s)>32?'ssid_long':''},
  psk:function(p){var n=p?bytes(p):0;return p&&(n<8||n>64)?'psk_length':''},
  apPassword:function(p){return p&&(p.length<8||p.length>63||/[^\x20-\x7e]/.test(p))?'ap_password_length':''}},
-networks:function(){return j(P.base+A+'networks')},
+networks:function(){return new Promise(function(res,rej){var k=setTimeout(function(){var e=new Error('timeout');e.code='timeout';rej(e)},4000);j(P.base+A+'networks').then(function(x){clearTimeout(k);res(x)},function(e){clearTimeout(k);rej(e)})})},
 scan:function(){return j(P.base+A+'scan',f({}))},
 addresses:function(s,ssid){var a=[{kind:'mdns',url:'http://'+s.host+'.local/',ssid:ssid}];if(s.ap_active)a.push({kind:'ap',url:'http://'+s.ap_ip+'/',ssid:s.ap_ssid});return a},
 connect:function(ssid,psk,o){var d={ssid:ssid,psk:psk||''};if(o&&o.later)d.when='later';return P.networks().then(function(s){return j(P.base+A+'connect',f(d)).then(function(){return{ssid:ssid,host:s.host,addresses:P.addresses(s,ssid)}})})},
@@ -239,7 +240,7 @@ function load(){if(!open)return;apPortal.networks().then(function(j){
  var ls=$('#ls');ls.innerHTML='';if(!j.networks.length)ls.innerHTML='<li class="m">'+(j.scanning?X.srch:X.empty)+'</li>';
  j.networks.forEach(function(n){var li=document.createElement('li');li.innerHTML='<span>'+esc(n.ssid)+(n.lock?'<span class="lk">🔒</span>':'')+'</span><span class="m">'+bars(n.rssi)+'</span>';
   if(n.ssid==$('#ss').value)li.className='sel';li.onclick=function(){$('#ss').value=n.ssid;$('#pw').focus();load()};ls.appendChild(li)});
- if(j.scanning)again(1500)}).catch(function(){if(!open)return;$('#st').innerHTML='<span class="m">'+esc(X.lost)+'</span>';again(3000)})}
+ if(open)again(j.scanning?1500:5000)}).catch(function(){if(!open)return;$('#st').innerHTML='<span class="m">'+esc(X.lost)+'</span>';again(3000)})}
 function show(v){open=v;bg.classList.toggle('on',v);if(v){apPortal.scan().then(function(){again(800)},function(){});load()}else clearTimeout(lt)}
 $('.fab').onclick=function(){show(true)};$('.x').onclick=function(){show(false)};bg.onclick=function(e){if(e.target===bg)show(false)};
 $('#rf').onclick=function(){apPortal.scan().then(function(){again(800)},function(e){fail(e.code||String(e.message||e))})};
@@ -263,6 +264,7 @@ function later(n){var e=$('#lt');if(!n){e.innerHTML='';return}
 $('#gl').onclick=function(){var s=sta();if(!s)return;
  apPortal.connect(s,$('#pw').value,{later:true}).then(function(){later(s);again(800)}).catch(function(e){fail(e.code||String(e.message||e))})};
 (function(){var p=apPortal.pending.load();if(p){show(true);follow(p)}})();
+document.addEventListener('visibilitychange',function(){if(!document.hidden&&open)load()});window.addEventListener('online',function(){if(open)load()});
 function eyes(root){var o='<svg viewBox="0 0 24 24"><path d="M12 5C7 5 2.7 8.1 1 12c1.7 3.9 6 7 11 7s9.3-3.1 11-7c-1.7-3.9-6-7-11-7zm0 11.5a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9zm0-7a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z"/></svg>',c='<svg viewBox="0 0 24 24"><path d="M12 5C7 5 2.7 8.1 1 12c1.7 3.9 6 7 11 7s9.3-3.1 11-7c-1.7-3.9-6-7-11-7zm0 11.5a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9zm0-7a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z"/><path d="M3.3 2 22 20.7 20.7 22 2 3.3z"/></svg>';[].forEach.call(root.querySelectorAll('button.ey'),function(b){var i=b.previousElementSibling;b.innerHTML=o;b.onclick=function(){var h=i.type=='password';i.type=h?'text':'password';b.innerHTML=h?c:o;i.focus()}})}
 eyes(R);
 window.apPortalPopup={open:function(){show(true)},close:function(){show(false)}};
