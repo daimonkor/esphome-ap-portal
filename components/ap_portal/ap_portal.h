@@ -15,6 +15,7 @@
 #include <freertos/queue.h>
 
 #include "esphome/components/web_server_base/web_server_base.h"
+#include "esphome/components/wifi/wifi_component.h"
 #include "esphome/core/automation.h"
 #include "esphome/core/component.h"
 #include "esphome/core/gpio.h"
@@ -23,7 +24,7 @@
 
 namespace esphome::ap_portal {
 
-class ApPortal : public Component, public AsyncWebHandler {
+class ApPortal : public Component, public AsyncWebHandler, public wifi::WiFiScanResultsListener {
  public:
   // ── configuration (from YAML) ──
   void set_active(bool active) { this->active_ = active; }
@@ -321,6 +322,16 @@ class ApPortal : public Component, public AsyncWebHandler {
   // Disconnect reasons during a switch from the page (event task writes, main loop logs): why the
   // first attempt fails is otherwise lost — the log is unreachable while the device is elsewhere.
   std::atomic<uint8_t> sw_reasons_[6]{};
+  std::atomic<uint8_t> sw_streak_{0};          // same error kind in a row (switch_hopeless)
+  std::atomic<uint8_t> sw_last_reason_{0};
+  std::atomic<bool> sw_fresh_connect_{false};  // STA_CONNECTED seen since the switch started
+  std::string switch_new_psk_;                 // same SSID, new password: still a switch to check
+  std::string switch_error_;                   // latched error kind of a reverted switch (under mu_)
+  uint32_t scan_list_ms_{0};                   // when ESPHome's scan list was last refreshed (0 = never)
+  bool scan_list_fresh_(uint32_t now) const;
+ public:
+  void on_wifi_scan_results(const wifi::wifi_scan_vector_t<wifi::WiFiScanResult> &results) override;
+ protected:
   std::atomic<uint8_t> sw_fails_{0};
   uint32_t sw_started_ms_{0};
   void log_switch_reasons_(const char *what);

@@ -30,6 +30,18 @@ Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monito
   one slot.
 
 ### Fixed
+- Review 2026-11-19 (2 reviewers, 6 counter-checks):
+  - ESPHome stores a scan list it takes while connected unsorted, and its first reconnect goes to entry 0 — any network. ap_portal now listens for every stored list (scan results listener) and puts the configured network first; a router switch waiting for its scan goes on from there (it acted one loop too early before, on the old list).
+  - A scan list older than 60 s is not trusted for a switch (the BSSID / channel may have moved): a background scan runs first.
+  - A newer switch request cancels an earlier one still waiting for its scan.
+  - Early give-up needs the same clear answer (wrong password / not found) 3 times in a row, not 3 failures of any kind.
+  - The page shows why a reverted switch failed (the reason was cleared by the reconnect to the old network).
+  - A switch is a success only after a new association: a same-SSID switch (new router password) no longer reports success at once, and falls back to the old password if the new one fails.
+  - With Wi-Fi disabled (a battery device outside service mode) the router-check and switch timers stop; nothing is saved over the chosen network.
+  - A pending AP password change is applied on shutdown (a reboot right after `reset_password()` lost it).
+  - «Apply saved network»: no stale «reverted», the switch counts as pending at once.
+  - Log while away: recording stops when the device is back (later lines no longer push the switch out), replayed at WARN, no stack copy.
+  - No logging while holding ESPHome's scan-results lock.
 - A router switch with a wrong password (or a network that is not there) went back to the old network only after the whole fallback time; it now gives up after 3 such answers in a row, and the page reports the error when the device has gone back, not before.
 - Router switch from the page failed every other time: ESPHome takes its first attempt from the first entry of its last scan list (unsorted after a background scan) and went to another access point. The new network's strongest entry is now put first in that list, so the device goes straight to it without a scan of its own; if the list lacks it, a background scan runs first (the access point keeps serving). An intermediate version dropped the list instead, and ESPHome's own scan made phones lose the access point.
 - Builds without any `manual_ip` failed (`get_manual_ip` exists only with `USE_WIFI_MANUAL_IP`).

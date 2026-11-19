@@ -559,8 +559,13 @@ async def to_code(config):
         # handler reads them from the web server task, so under ESPHome's lock.
         wifi.request_wifi_scan_results()
         wifi.request_wifi_scan_results_lock()
+        # ESPHome never sorts a scan list it stores while connected; ap_portal puts the configured
+        # network first after each one (and goes on with a router switch waiting for it)
+        wifi.request_wifi_scan_results_listener()
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
+    if config[CONF_API][CONF_ENABLED]:
+        cg.add(cg.RawExpression(f"wifi::global_wifi_component->add_scan_results_listener({var})"))
 
     active = config[CONF_ACTIVE]
     if isinstance(active, bool):

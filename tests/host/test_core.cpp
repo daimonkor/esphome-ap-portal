@@ -430,13 +430,22 @@ static void test_reboot_timer() {
 
 static void test_switch_hopeless() {
   using namespace ap_portal_core;
-  CHECK(!switch_hopeless(2, 15));   // two wrong-password answers: not yet
+  CHECK(!switch_hopeless(2, 15));   // two wrong-password answers in a row: not yet
   CHECK(switch_hopeless(3, 15));    // three: give up, back to the old network
   CHECK(switch_hopeless(3, 202));
   CHECK(switch_hopeless(4, 201));   // network not there
   CHECK(!switch_hopeless(5, 205));  // a plain failure waits for the deadline
   CHECK(!switch_hopeless(5, 8));    // our own leave is no answer
   CHECK(!switch_hopeless(0, 0));
+  // streak: only the same kind in a row counts
+  uint8_t r = 0, k = 0;
+  k = switch_streak(r, k, 201); r = 201;  CHECK(k == 1);
+  k = switch_streak(r, k, 201); r = 201;  CHECK(k == 2);
+  k = switch_streak(r, k, 15); r = 15;    CHECK(k == 1);   // not_found, not_found, wrong_password
+  CHECK(!switch_hopeless(k, r));
+  k = switch_streak(r, k, 202); r = 202;  CHECK(k == 2);   // 15 and 202 are both wrong_password
+  k = switch_streak(r, k, 204); r = 204;  CHECK(k == 3);
+  CHECK(switch_hopeless(k, r));
 }
 
 static void test_passes_unknown_mac() {

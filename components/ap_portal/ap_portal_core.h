@@ -627,15 +627,22 @@ inline const char *sta_error_kind(uint8_t reason) {
   }
 }
 
-// A router switch from the page that cannot work: the same clear answer several times in a row
+// A router switch from the page that cannot work: the same clear answer several times IN A ROW
 // (wrong password, network not there). Waiting the whole fallback time only keeps the device off
 // every router; anything else (a timeout, an association failure) may still pass and waits.
+// `streak` = how many disconnects in a row gave the same kind as `reason`.
 static constexpr uint8_t SWITCH_HOPELESS_FAILS = 3;
-inline bool switch_hopeless(uint8_t fails, uint8_t reason) {
-  if (fails < SWITCH_HOPELESS_FAILS)
+inline bool switch_hopeless(uint8_t streak, uint8_t reason) {
+  if (streak < SWITCH_HOPELESS_FAILS)
     return false;
   const char *k = sta_error_kind(reason);
   return std::strcmp(k, "wrong_password") == 0 || std::strcmp(k, "not_found") == 0;
+}
+// Streak bookkeeping: same error kind as the previous disconnect -> +1, else start at 1.
+inline uint8_t switch_streak(uint8_t prev_reason, uint8_t prev_streak, uint8_t reason) {
+  if (prev_streak > 0 && std::strcmp(sta_error_kind(prev_reason), sta_error_kind(reason)) == 0)
+    return prev_streak < 255 ? prev_streak + 1 : 255;
+  return 1;
 }
 
 // ───────────────────────────── access point only without a router (ap_mode: fallback) ─────────────────────────────

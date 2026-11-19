@@ -126,6 +126,7 @@ static constexpr uint32_t PASSWORD_APPLY_DELAY_MS = 2000;  // the HTTP answer le
 static constexpr uint32_t SCAN_TIMEOUT_MS = 20000;
 static constexpr uint32_t SCAN_RETRY_MS = 2000;
 static constexpr uint32_t LEAVE_SCAN_WAIT_MS = 8000;  // longest wait for the scan before a switch
+static constexpr uint32_t SCAN_LIST_FRESH_MS = 60000;  // a scan list older than this is not trusted for a switch
 static constexpr uint32_t LAMBDA_REFRESH_MS = 1000;
 static constexpr uint32_t PASSWORD_MAGIC = 0xA9F0C0DE;
 struct PasswordRecord {
@@ -342,6 +343,13 @@ void ApPortal::dump_config() {
 }
 
 void ApPortal::on_shutdown() {
+  // A password change still waiting for its 2 s delay is applied now: a reboot right after
+  // reset_password() (a device's factory reset) lost it (2026-11-19 review).
+  if (this->password_pending_) {
+    this->password_pending_ = false;
+    this->apply_password_(this->password_pending_value_, this->password_pending_save_);
+    this->password_pending_value_.clear();
+  }
   this->dns_close_();
   this->lock_release_();
   std::lock_guard<std::mutex> g(this->mu_);
@@ -394,11 +402,15 @@ void ApPortal::on_wifi_event_(void *arg, esp_event_base_t, int32_t id, void *dat
           self->sw_reasons_[n] = r;
         if (n < 255)
           self->sw_fails_ = n + 1;
+        self->sw_streak_ = ap_portal_core::switch_streak(self->sw_last_reason_.load(), self->sw_streak_.load(), r);
+        self->sw_last_reason_ = r;
       }
       return;
     }
     case WIFI_EVENT_STA_CONNECTED:
       self->sta_reason_ = 0;
+      if (self->switch_pending_)
+        self->sw_fresh_connect_ = true;  // a new association, not the link the switch started on
       return;
     default:
       return;
@@ -830,7 +842,15 @@ void ApPortal::switch_start_(const std::string &ssid, const std::string &psk, ui
   }
   this->check_save_(ssid, this->switch_old_ssid_, this->switch_old_psk_);
   this->switch_target_ = ssid;
+  this->switch_new_psk_ = psk;
   this->sw_fails_ = 0;
+  this->sw_streak_ = 0;
+  this->sw_last_reason_ = 0;
+  this->sw_fresh_connect_ = false;
+  {
+    std::lock_guard<std::mutex> g(this->mu_);
+    this->switch_error_.clear();
+  }
   this->sw_started_ms_ = now;
   this->away_start_(now);
   this->switch_pending_ = true;
@@ -845,19 +865,22 @@ void ApPortal::switch_start_(const std::string &ssid, const std::string &psk, ui
 void ApPortal::switch_reconnect_(const std::string &ssid, const std::string &psk) {
   auto *w = wifi::global_wifi_component;
   const bool was_connected = w->is_connected();
+  this->leave_pending_ = false;  // a newer request replaces an earlier one still waiting for its scan
   w->save_wifi_sta(ssid, psk);  // saved by ESPHome, kept across reboots; reconnects only if not connected
   // ESPHome's first attempt goes to the first entry of its scan list without scanning again (see
   // ReleaseScanTag). Put the new network's strongest access point there: the device goes straight
   // to it, with no scan of ESPHome's own — that one leaves the access point's channel for seconds
-  // and phones lost the access point (2026-11-19).
-  if (this->prefer_scan_entry_(ssid)) {
+  // and phones lost the access point (2026-11-19). Only a fresh list: an old one may hold a
+  // BSSID / channel the router has left.
+  if (this->scan_list_fresh_(millis()) && this->prefer_scan_entry_(ssid)) {
     if (was_connected)
       esp_wifi_disconnect();
     return;
   }
   if (was_connected) {
-    // Not in the list: our background scan first (the radio returns to the access point's channel
-    // between channels), then leave the old router — see leave_tick_().
+    // Not in the list (or the list is old): our background scan first (the radio returns to the
+    // access point's channel between channels), then leave the old router once ESPHome has stored
+    // the new list — on_wifi_scan_results(); leave_tick_() only if that never comes.
     this->leave_ssid_ = ssid;
     this->leave_pending_ = true;
     this->leave_at_ = millis() + LEAVE_SCAN_WAIT_MS;
@@ -874,32 +897,65 @@ void ApPortal::switch_reconnect_(const std::string &ssid, const std::string &psk
 // ESPHome's own sort does (WiFiScanResult has no default constructor).
 bool ApPortal::prefer_scan_entry_(const std::string &ssid) {
   auto *w = wifi::global_wifi_component;
-  wifi::ScanResultsLock lock(w);
-  auto &list = const_cast<wifi::wifi_scan_vector_t<wifi::WiFiScanResult> &>(w->get_scan_result());
-  const size_t n = list.size();
-  int best = -1;
-  for (size_t i = 0; i < n; i++) {
-    const auto &r = list[i];
-    const auto s = r.get_ssid();
-    if (r.get_is_hidden() || s.size() != ssid.size() || std::memcmp(s.c_str(), ssid.data(), ssid.size()) != 0)
-      continue;
-    if (best < 0 || r.get_rssi() > list[best].get_rssi())
-      best = (int) i;
-  }
-  if (best < 0)
-    return false;
-  for (size_t i = 0; i < n; i++)
-    list[i].set_matches(false);
-  if (best != 0) {
-    alignas(wifi::WiFiScanResult) uint8_t tmp[sizeof(wifi::WiFiScanResult)];
-    std::memcpy(tmp, static_cast<void *>(&list[0]), sizeof(tmp));
-    std::memcpy(static_cast<void *>(&list[0]), static_cast<void *>(&list[best]), sizeof(tmp));
-    std::memcpy(static_cast<void *>(&list[best]), tmp, sizeof(tmp));
-  }
-  list[0].set_matches(true);
-  ESP_LOGD(TAG, "Wi-Fi page: '%s' first in the scan list (channel %u, %d dBm)", ssid.c_str(),
-           (unsigned) list[0].get_channel(), (int) list[0].get_rssi());
+  unsigned ch = 0;
+  int rssi = 0;
+  {
+    wifi::ScanResultsLock lock(w);
+    auto &list = const_cast<wifi::wifi_scan_vector_t<wifi::WiFiScanResult> &>(w->get_scan_result());
+    const size_t n = list.size();
+    int best = -1;
+    for (size_t i = 0; i < n; i++) {
+      const auto &r = list[i];
+      const auto s = r.get_ssid();
+      if (r.get_is_hidden() || s.size() != ssid.size() || std::memcmp(s.c_str(), ssid.data(), ssid.size()) != 0)
+        continue;
+      if (best < 0 || r.get_rssi() > list[best].get_rssi())
+        best = (int) i;
+    }
+    if (best < 0)
+      return false;
+    for (size_t i = 0; i < n; i++)
+      list[i].set_matches(false);
+    if (best != 0) {
+      alignas(wifi::WiFiScanResult) uint8_t tmp[sizeof(wifi::WiFiScanResult)];
+      std::memcpy(tmp, static_cast<void *>(&list[0]), sizeof(tmp));
+      std::memcpy(static_cast<void *>(&list[0]), static_cast<void *>(&list[best]), sizeof(tmp));
+      std::memcpy(static_cast<void *>(&list[best]), tmp, sizeof(tmp));
+    }
+    list[0].set_matches(true);
+    ch = list[0].get_channel();
+    rssi = list[0].get_rssi();
+  }  // no logging under the lock: the log goes to API clients (socket writes)
+  ESP_LOGD(TAG, "Wi-Fi page: '%s' first in the scan list (channel %u, %d dBm)", ssid.c_str(), ch, rssi);
   return true;
+}
+
+bool ApPortal::scan_list_fresh_(uint32_t now) const {
+  return this->scan_list_ms_ != 0 && !ap_portal_core::elapsed(now, this->scan_list_ms_, SCAN_LIST_FRESH_MS);
+}
+
+// ESPHome stored a new scan list (called in its loop, right after the list is filled). While
+// connected ESPHome never sorts it (check_scanning_finished runs only in its own connect scan), so
+// the first entry is any network: an ordinary reconnect would go there (2026-11-19 review). Put
+// the configured network first; a switch waiting for this scan goes on from here. Not while
+// ESPHome is connecting: its own scan is sorted by it right after.
+void ApPortal::on_wifi_scan_results(const wifi::wifi_scan_vector_t<wifi::WiFiScanResult> &results) {
+  auto *w = wifi::global_wifi_component;
+  this->scan_list_ms_ = millis() | 1;
+  if (!w->is_connected())
+    return;
+  if (this->leave_pending_) {
+    this->leave_pending_ = false;
+    if (!this->prefer_scan_entry_(this->leave_ssid_))
+      this->drop_scan_list_(this->leave_ssid_);
+    ESP_LOGD(TAG, "Wi-Fi page: leaving the router");
+    esp_wifi_disconnect();
+    return;
+  }
+  const auto sta = w->get_sta();
+  const std::string cur(sta.get_ssid().c_str(), sta.get_ssid().size());
+  if (cur.empty() || !this->prefer_scan_entry_(cur))
+    this->drop_scan_list_(cur);
 }
 
 void ApPortal::drop_scan_list_(const std::string &ssid) {
@@ -911,17 +967,15 @@ void ApPortal::drop_scan_list_(const std::string &ssid) {
   ESP_LOGD(TAG, "Wi-Fi page: '%s' not in the scan list, list dropped, ESPHome scans", ssid.c_str());
 }
 
-// The switch leaves the old router once the background scan for the new network is done.
+// The switch leaves the old router from on_wifi_scan_results(); this is only the fallback when
+// ESPHome never reports the scan (busy radio, scan refused).
 void ApPortal::leave_tick_(uint32_t now) {
-  if (!this->leave_pending_)
+  if (!this->leave_pending_ || !ap_portal_core::reached(now, this->leave_at_))
     return;
-  if ((this->scanning_ || this->scan_retry_at_ != 0) && !ap_portal_core::reached(now, this->leave_at_))
-    return;  // the scan runs (or retries after a busy radio)
   this->leave_pending_ = false;
-  if (!this->prefer_scan_entry_(this->leave_ssid_))
-    this->drop_scan_list_(this->leave_ssid_);
+  this->drop_scan_list_(this->leave_ssid_);  // ESPHome scans for it itself
   if (wifi::global_wifi_component->is_connected()) {
-    ESP_LOGD(TAG, "Wi-Fi page: leaving the router");
+    ESP_LOGW(TAG, "Wi-Fi page: no scan result in time, leaving the router");
     esp_wifi_disconnect();
   }
 }
@@ -957,18 +1011,25 @@ void ApPortal::away_log_(uint8_t level, const char *tag, const char *msg, size_t
 }
 
 void ApPortal::away_start_(uint32_t now) {
-  if (!this->away_rec_)
-    this->away_since_ = now;  // a second switch while away keeps the earlier lines
+  if (!this->away_rec_ && this->away_n_ == 0)
+    this->away_since_ = now;  // a second switch before the replay keeps the earlier lines
   this->away_back_ms_ = 0;
   this->away_rec_ = true;
 }
 
 void ApPortal::away_tick_(bool router, uint32_t now) {
-  if (!this->away_rec_)
+  if (this->away_rec_ && router && !this->switch_pending_)
+    this->away_rec_ = false;  // back: the lines of the switch are kept as they are, nothing newer
+  if (this->away_rec_)
     return;
   if (!router || this->switch_pending_) {
     this->away_back_ms_ = 0;
     return;
+  }
+  {
+    std::lock_guard<std::mutex> g(this->away_mu_);
+    if (this->away_n_ == 0)
+      return;
   }
   if (this->away_back_ms_ == 0)
     this->away_back_ms_ = now ? now : 1;
@@ -980,26 +1041,20 @@ void ApPortal::away_tick_(bool router, uint32_t now) {
       return;  // nobody listens (another network): keep the lines until someone does
   }
 #endif
-  this->away_rec_ = false;
-  AwayLine lines[AWAY_LINES];
-  uint8_t n;
-  uint16_t lost;
-  {
-    std::lock_guard<std::mutex> g(this->away_mu_);
-    n = this->away_n_;
-    lost = this->away_lost_;
-    const uint8_t first = (this->away_head_ + AWAY_LINES - n) % AWAY_LINES;
-    for (uint8_t i = 0; i < n; i++)
-      lines[i] = this->away_[(first + i) % AWAY_LINES];
-    this->away_n_ = 0;
-    this->away_head_ = 0;
-    this->away_lost_ = 0;
+  // Replayed at WARN (a logger at WARN level would drop INFO), straight from the ring: recording is
+  // off, so away_log_() returns before taking the mutex.
+  std::lock_guard<std::mutex> g(this->away_mu_);
+  const uint8_t n = this->away_n_;
+  const uint8_t first = (this->away_head_ + AWAY_LINES - n) % AWAY_LINES;
+  ESP_LOGW(TAG, "Log while away (router switch), %u line(s)%s:", (unsigned) n,
+           this->away_lost_ ? ", older ones dropped" : "");
+  for (uint8_t i = 0; i < n; i++) {
+    const AwayLine &l = this->away_[(first + i) % AWAY_LINES];
+    ESP_LOGW(TAG, "  +%5.1f s %s", (l.ms - this->away_since_) / 1000.0f, l.text);
   }
-  if (n == 0)
-    return;
-  ESP_LOGI(TAG, "Log while away (router switch), %u line(s)%s:", (unsigned) n, lost ? ", older ones dropped" : "");
-  for (uint8_t i = 0; i < n; i++)
-    ESP_LOGI(TAG, "  +%5.1f s %s", (lines[i].ms - this->away_since_) / 1000.0f, lines[i].text);
+  this->away_n_ = 0;
+  this->away_head_ = 0;
+  this->away_lost_ = 0;
 }
 
 void ApPortal::log_switch_reasons_(const char *what) {
@@ -1022,17 +1077,26 @@ void ApPortal::switch_tick_(uint32_t now) {
   if (!this->switch_pending_)
     return;
   auto *w = wifi::global_wifi_component;
-  if (w->is_connected() && connected_ssid() == this->switch_target_) {
+  if (w->is_disabled()) {
+    // Wi-Fi off (a battery device left service mode): nothing to wait for, nothing to revert —
+    // the time only counts while the radio runs (2026-11-19 review).
+    this->switch_deadline_ = now + this->fb_timeout_;
+    return;
+  }
+  // A fresh association is required: right after the request the device is still on the old link,
+  // and with the same SSID (a new router password) that link would look like success.
+  if (this->sw_fresh_connect_ && w->is_connected() && connected_ssid() == this->switch_target_) {
     this->switch_pending_ = false;
     this->log_switch_reasons_("connected");
     this->check_erase_();  // the new network works, nothing to check after a restart
     return;
   }
-  const bool hopeless = ap_portal_core::switch_hopeless(this->sw_fails_.load(), this->sta_reason_.load());
+  const bool hopeless = ap_portal_core::switch_hopeless(this->sw_streak_.load(), this->sw_last_reason_.load());
   if (!hopeless && !ap_portal_core::reached(now, this->switch_deadline_))
     return;
   this->switch_pending_ = false;
-  if (this->switch_old_ssid_.empty() || this->switch_old_ssid_ == this->switch_target_) {
+  if (this->switch_old_ssid_.empty() ||
+      (this->switch_old_ssid_ == this->switch_target_ && this->switch_old_psk_ == this->switch_new_psk_)) {
     ESP_LOGW(TAG, "Wi-Fi page: '%s' did not connect, nothing to fall back to", this->switch_target_.c_str());
     return;
   }
@@ -1043,8 +1107,11 @@ void ApPortal::switch_tick_(uint32_t now) {
   {
     std::lock_guard<std::mutex> g(this->mu_);
     this->switch_reverted_ = true;
+    // the reconnect to the old network clears sta_reason_: keep why this one failed for the page
+    this->switch_error_ = ap_portal_core::sta_error_kind(this->sw_last_reason_.load());
   }
   this->switch_reconnect_(this->switch_old_ssid_, this->switch_old_psk_);
+  this->switch_new_psk_.clear();
   this->check_erase_();  // back on the network that worked
   this->on_router_fallback_.call("previous", this->switch_old_ssid_);
   this->switch_old_psk_.clear();
@@ -1175,6 +1242,12 @@ void ApPortal::fallback_tick_(uint32_t now) {
   if (this->fb_stage_ == 0)
     return;
   auto *w = wifi::global_wifi_component;
+  if (w->is_disabled()) {
+    // Wi-Fi off (battery device outside service mode): the router cannot answer, so this is no
+    // verdict on the new network — and nothing may be saved over it (2026-11-19 review).
+    this->fb_deadline_ = now + this->fb_timeout_;
+    return;
+  }
   if (w->is_connected()) {
     ESP_LOGI(TAG, "Router check: connected to '%s'", connected_ssid().c_str());
     this->fb_stage_ = 0;
@@ -1500,13 +1573,18 @@ void ApPortal::handle_api_(AsyncWebServerRequest *request, const Classified &c) 
       this->target_ssid_ = ssid;  // the page asks how this one goes
       this->sta_reason_ = 0;
       this->switch_reverted_ = false;  // a revert of an earlier switch is no answer for this one
+      this->switch_error_.clear();
     }
     this->http_sta_at_ = millis() + (later ? 0 : PASSWORD_APPLY_DELAY_MS);  // the answer leaves first
     this->http_sta_pending_ = true;
   } else if (p == a + "apply" || p == a + "cancel") {
     std::lock_guard<std::mutex> g(this->mu_);
-    if (p == a + "apply")
+    if (p == a + "apply" && !this->later_ssid_snap_.empty()) {
       this->target_ssid_ = this->later_ssid_snap_;
+      this->sta_reason_ = 0;
+      this->switch_reverted_ = false;  // a revert of an earlier switch is no answer for this one
+      this->switch_error_.clear();
+    }
     this->http_later_cmd_ = p == a + "apply" ? 1 : 2;
   } else if (this->wifi_ap_password_ && p == a + "ap_password") {
     const std::string pw = request->arg("password");
@@ -1578,8 +1656,14 @@ void ApPortal::send_networks_(AsyncWebServerRequest *request) {
     if (!target.empty()) {
       json_escape_into_buffer(esc, StringRef(target.c_str(), target.size()));
       const bool on_target = connected && connected_ssid() == target;
-      out += ",\"target\":\"" + std::string(esc) + "\",\"sta_error\":\"" +
-             (on_target ? "" : ap_portal_core::sta_error_kind(this->sta_reason_.load())) + "\"" +
+      std::string err;
+      {
+        std::lock_guard<std::mutex> g(this->mu_);
+        err = this->switch_reverted_ ? this->switch_error_ : std::string();  // latched at the revert
+      }
+      if (err.empty() && !on_target)
+        err = ap_portal_core::sta_error_kind(this->sta_reason_.load());
+      out += ",\"target\":\"" + std::string(esc) + "\",\"sta_error\":\"" + err + "\"" +
              ",\"sta_reason\":" + to_string((unsigned) this->sta_reason_.load()) +
              ",\"fails\":" + to_string((unsigned) this->sw_fails_.load());
       std::string prev;
@@ -1588,7 +1672,7 @@ void ApPortal::send_networks_(AsyncWebServerRequest *request) {
         std::lock_guard<std::mutex> g(this->mu_);
         prev = this->switch_previous_;
         reverted = this->switch_reverted_;
-        queued = this->http_sta_pending_ && !this->http_sta_later_;  // accepted, starts in a moment
+        queued = (this->http_sta_pending_ && !this->http_sta_later_) || this->http_later_cmd_ == 1;  // starts in a moment
       }
       json_escape_into_buffer(esc, StringRef(prev.c_str(), prev.size()));
       out += ",\"previous\":\"" + std::string(esc) + "\",\"reverted\":" + (reverted ? "true" : "false");
