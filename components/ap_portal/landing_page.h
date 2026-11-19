@@ -24,6 +24,8 @@ a.s{display:block;color:inherit;text-decoration:none;border:1px solid rgba(127,1
 <h1>{{title}}</h1><p id="t">Connected to the device's own Wi-Fi.</p>
 <a class="b" id="p" href="{{enter}}">{{primary_label}}</a>
 <div class="h" id="ib" style="display:none">For the full version open http://{{ap_ip}}/ in the browser (Safari).</div>
+<a class="s" id="br" style="display:none" href="{{enter}}">Open in the browser ↗</a>
+<div class="h" id="bh" style="display:none">The sign-in window closes and the "Sign in" prompt won't come back. Return at http://{{ap_ip}}/ — or type any http:// address while on this Wi-Fi.</div>
 {{#if secondary_href}}<a class="s" id="sc" href="{{secondary_href}}">{{secondary_label}}</a>{{/if}}
 <div class="o"><b id="oa">All addresses</b>
 <div><span id="o1">Device Wi-Fi</span>: <a class="cp" href="http://{{ap_ip}}/" data-copy="http://{{ap_ip}}/">http://{{ap_ip}}/</a> <a class="go" href="http://{{ap_ip}}/" target="_blank" rel="noopener">↗</a></div>
@@ -32,31 +34,32 @@ a.s{display:block;color:inherit;text-decoration:none;border:1px solid rgba(127,1
 </div><div class="h" id="h">Tap an address to copy it, then paste it into your browser.</div>
 </div><script>
 var L=(navigator.language||'en').slice(0,2),T={
-uk:['Ви підключені до Wi-Fi пристрою.','Відкрити сторінку пристрою','Усі адреси','Wi-Fi пристрою','Домашня мережа','Домашня мережа (mDNS)','Натисніть адресу, щоб скопіювати, і вставте її в браузер.','Wi-Fi роутера','Скопійовано','Повна версія — у браузері (Safari): http://{{ap_ip}}/','Адресу скопійовано: вставте її в Safari для повної версії.'],
-ru:['Вы подключены к Wi-Fi устройства.','Открыть страницу устройства','Все адреса','Wi-Fi устройства','Домашняя сеть','Домашняя сеть (mDNS)','Нажмите адрес, чтобы скопировать, и вставьте его в браузер.','Wi-Fi роутера','Скопировано','Полная версия — в браузере (Safari): http://{{ap_ip}}/','Адрес скопирован: вставьте его в Safari для полной версии.']};
+uk:['Ви підключені до Wi-Fi пристрою.','Відкрити сторінку пристрою','Усі адреси','Wi-Fi пристрою','Домашня мережа','Домашня мережа (mDNS)','Натисніть адресу, щоб скопіювати, і вставте її в браузер.','Wi-Fi роутера','Скопійовано','Повна версія — у браузері (Safari): http://{{ap_ip}}/','Адресу скопійовано:','Відкрити в браузері ↗','Вікно входу закриється, і плашка «Увійти в мережу» більше не з’явиться. Повертайтеся за адресою http://{{ap_ip}}/ — або наберіть будь-яку адресу з http://, поки ви в цій мережі.'],
+ru:['Вы подключены к Wi-Fi устройства.','Открыть страницу устройства','Все адреса','Wi-Fi устройства','Домашняя сеть','Домашняя сеть (mDNS)','Нажмите адрес, чтобы скопировать, и вставьте его в браузер.','Wi-Fi роутера','Скопировано','Полная версия — в браузере (Safari): http://{{ap_ip}}/','Адрес скопирован:','Открыть в браузере ↗','Окно входа закроется, и плашка «Войти в сеть» больше не появится. Возвращайтесь по адресу http://{{ap_ip}}/ — или наберите любой адрес с http://, пока вы в этой сети.']};
 if(T[L]){var x=T[L],g=function(i){return document.getElementById(i)},s=function(i,v){var e=g(i);if(e)e.textContent=v};
-s('t',x[0]);{{#if primary_default}}s('p',x[1]);{{/if}}s('oa',x[2]);s('o1',x[3]);s('o2',x[4]);s('o3',x[5]);s('h',x[6]);{{#if secondary_default}}s('sc',x[7]);{{/if}}s('ib',x[9]);}
+s('t',x[0]);{{#if primary_default}}s('p',x[1]);{{/if}}s('oa',x[2]);s('o1',x[3]);s('o2',x[4]);s('o3',x[5]);s('h',x[6]);{{#if secondary_default}}s('sc',x[7]);{{/if}}s('ib',x[9]);s('br',x[11]);s('bh',x[12]);}
 function copyText(t){try{if(navigator.clipboard&&window.isSecureContext){navigator.clipboard.writeText(t);return}}catch(e){}var a=document.createElement('textarea');a.value=t;a.setAttribute('readonly','');a.style.cssText='position:fixed;top:0;left:0;opacity:0';document.body.appendChild(a);a.select();a.setSelectionRange(0,t.length);try{document.execCommand('copy')}catch(e){}document.body.removeChild(a)}
 function onCopy(root,label){root.addEventListener('click',function(e){var a=e.target.closest&&e.target.closest('a.cp');if(!a)return;e.preventDefault();copyText(a.getAttribute('data-copy'));var o=a.textContent;a.textContent='\u2713 '+label;setTimeout(function(){a.textContent=o},1800)})}
 onCopy(document,(T[L]||[])[8]||'Copied');
-// The sign-in window is a cut-down browser that closes by itself. Android's (a WebView): the main
-// button hands the page to the phone's browser with an intent:// link, falling back to the plain link.
-// Apple's (iPhone, iPad, Mac) cannot open Safari on a network without internet: a hint with the address.
-(function(){var ua=navigator.userAgent,p=document.getElementById('p'),ib=document.getElementById('ib');
- if(p&&/iPhone|iPad|iPod|Macintosh/.test(ua)&&!/Safari\/|Chrome|Firefox|Edg/.test(ua)){
-  if(ib)ib.style.display='block';
-  // The address goes to the clipboard (for Safari), then the page opens here as the fallback.
-  p.onclick=function(e){e.preventDefault();var u;try{u=new URL(p.getAttribute('href'),location.href).href}catch(x){u=p.href}
-   copyText(u);var o=p.textContent;p.textContent='\u2713 '+((T[L]||[])[8]||'Copied');
-   if(ib){ib.textContent=(T[L]||[])[10]||'Address copied: paste it into Safari for the full version.';ib.style.display='block'}
-   setTimeout(function(){location.href=u},1200);setTimeout(function(){p.textContent=o},2500)}}
- if(!p||!/Android/i.test(ua)||!/; wv\)/.test(ua))return;
- p.onclick=function(e){var u;try{u=new URL(p.getAttribute('href'),location.href)}catch(x){return}
-  if(!/^https?:$/.test(u.protocol))return;e.preventDefault();var gone=false;
-  document.addEventListener('visibilitychange',function(){if(document.hidden)gone=true});
+// The sign-in window is a cut-down browser. Its main button opens the page right there and copies
+// the address (so it is not lost). Android's (a WebView) also gets "Open in the browser ↗" — an
+// intent:// link to the phone's browser; after it the sign-in prompt does not come back, which the
+// note under it says. Apple's (iPhone, iPad, Mac) cannot open Safari on a network without internet.
+(function(){var ua=navigator.userAgent,p=document.getElementById('p'),ib=document.getElementById('ib'),
+ br=document.getElementById('br'),bh=document.getElementById('bh'),x=T[L]||[];
+ var droid=/Android/i.test(ua)&&/; wv\)/.test(ua),apple=/iPhone|iPad|iPod|Macintosh/.test(ua)&&!/Safari\/|Chrome|Firefox|Edg/.test(ua);
+ if(!p||!(droid||apple))return;
+ var abs=function(){try{return new URL(p.getAttribute('href'),location.href)}catch(e){return null}};
+ p.onclick=function(e){var u=abs();if(!u)return;e.preventDefault();copyText(u.href);
+  p.textContent='✓ '+(x[8]||'Copied');
+  if(ib){ib.textContent=(x[10]||'Address copied:')+' '+u.href;ib.style.display='block'}
+  setTimeout(function(){location.href=u.href},1200)};
+ if(apple&&ib)ib.style.display='block';
+ if(!droid||!br)return;
+ br.style.display='block';if(bh)bh.style.display='block';
+ br.onclick=function(e){var u=abs();if(!u||!/^https?:$/.test(u.protocol))return;e.preventDefault();copyText(u.href);
   location.href='intent://'+u.host+u.pathname+u.search+'#Intent;scheme='+u.protocol.slice(0,-1)+
-   ';action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;S.browser_fallback_url='+encodeURIComponent(u.href)+';end';
-  setTimeout(function(){if(!gone&&!document.hidden)location.href=u.href},1500)}})();
+   ';action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;S.browser_fallback_url='+encodeURIComponent(u.href)+';end'}})();
 {{#if secondary_default}}var sc=document.getElementById('sc');if(sc)sc.onclick=function(e){if(window.apPortalPopup){e.preventDefault();window.apPortalPopup.open()}};{{/if}}
 </script>{{#if secondary_default}}<script src="/ap_portal/popup.js" data-accent="{{accent_color}}" data-button="none"></script>{{/if}}</body></html>
 )HTML";

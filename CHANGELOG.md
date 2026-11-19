@@ -7,10 +7,11 @@ Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monito
 ### Changed
 - Gate mode: the Wi-Fi page, popup and `/ap_portal/` API no longer wait for Enter — anyone on the
   access point can press it anyway; the access point password is the protection.
-- The landing page's main button leaves Android's sign-in window: it opens the device page in the
-  phone's browser (`intent://`, plain link as fallback). On iPhone, whose sign-in window cannot open
-  Safari on a network without internet (also iPad and Mac), the tap copies the address for Safari,
-  says so and opens the page in the sign-in window as the fallback.
+- Landing page in a sign-in window (Android, iPhone, iPad, Mac): the main button opens the page right
+  there and copies its address ("✓ Copied"), so it is not lost. Android also gets "Open in the
+  browser ↗" (`intent://`) with a note that the sign-in prompt won't come back, and how to return
+  (the access point address, or any `http://` address while on its Wi-Fi). iPhone/Mac: a hint to
+  paste the address into Safari for the full version.
 - The landing page's Wi-Fi button opens the popup in place (no page change for Back to return to).
   `popup.js` takes `data-button="none"` (no corner button, `apPortalPopup.open()` only).
 - Wi-Fi page and popup: "Device is on …"; polled every 5 s while open (4 s timeout) and on return
