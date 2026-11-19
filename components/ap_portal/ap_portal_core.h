@@ -659,8 +659,10 @@ class RebootTimer {
   explicit RebootTimer(uint32_t timeout_ms = 0) : timeout_(timeout_ms) {}
   void set(uint32_t timeout_ms) { this->timeout_ = timeout_ms; }
   uint32_t timeout() const { return this->timeout_; }
-  bool update(bool router, uint32_t clients, uint32_t now) {
-    if (this->timeout_ == 0 || router || clients > 0) {
+  // armed: the device has a router network to go back to (YAML or saved from the page) and Wi-Fi is
+  // on. A device that lives without a router, or whose Wi-Fi is off on purpose, never reboots for it.
+  bool update(bool router, uint32_t clients, uint32_t now, bool armed = true) {
+    if (this->timeout_ == 0 || !armed || router || clients > 0) {
       this->since_ = 0;
       return false;
     }

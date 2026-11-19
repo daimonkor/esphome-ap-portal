@@ -616,7 +616,32 @@ static void test_dns_qname() {
   CHECK(std::string(ap_portal_core::route_name(ap_portal_core::Route::REDIRECT)) == "redirect");
 }
 
+
+static void test_reboot_timer_armed() {
+  ap_portal_core::RebootTimer t(15u * 60u * 1000u);
+  // no router network set / Wi-Fi off: never fires, never even counts
+  CHECK(!t.update(false, 0, 1000, false));
+  CHECK(!t.running());
+  CHECK(!t.update(false, 0, 1000 + 20u * 60u * 1000u, false));
+  CHECK(!t.running());
+  // armed: counts and fires after 15 min, a client stops it, the router stops it
+  CHECK(!t.update(false, 0, 2000, true));
+  CHECK(t.running());
+  CHECK(!t.update(false, 1, 2000 + 10u * 60u * 1000u, true));
+  CHECK(!t.running());
+  CHECK(!t.update(false, 0, 3000, true));
+  CHECK(t.update(false, 0, 3000 + 15u * 60u * 1000u, true));
+  // disarmed in the middle (Wi-Fi switched off): the count starts over
+  ap_portal_core::RebootTimer u(60000);
+  CHECK(!u.update(false, 0, 100, true));
+  CHECK(!u.update(false, 0, 50000, false));
+  CHECK(!u.update(false, 0, 60000, true));
+  CHECK(!u.update(false, 0, 110000, true));
+  CHECK(u.update(false, 0, 120001, true));
+}
+
 int main() {
+  test_reboot_timer_armed();
   test_dns_qname();
   test_api_busy();
   test_cors();

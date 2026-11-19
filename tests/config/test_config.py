@@ -363,3 +363,14 @@ def test_ap_raise_default_has_no_rename_warning(tmp_path):
     r, out = run(tmp_path, head() + "ap_portal:\n  ap_raise: always\n")
     assert r.returncode == 0, out[-2000:]
     assert "renamed to ap_raise" not in out, out[-2000:]
+
+
+def test_no_router_with_api_warns_about_api_reboot(tmp_path):
+    h = head().replace("  ssid: r\n", "").replace("  password: router123\n", "")
+    r, out = run(tmp_path, h + "api:\nap_portal:\n")
+    if r.returncode != 0:
+        pytest.skip("this ESPHome needs a network for this head: " + out[-300:])
+    assert "api: reboot_timeout" in out, out[-2000:]
+    r, out = run(tmp_path, h + "api:\n  reboot_timeout: 0s\nap_portal:\n")
+    assert r.returncode == 0, out[-2000:]
+    assert "api: reboot_timeout (default" not in out, out[-2000:]

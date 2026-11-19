@@ -433,6 +433,19 @@ def _final_validate(config):
             "are taken from there (one place, nothing to keep in sync)."
         )
 
+    api_conf = full.get("api")
+    if not wifi.get("networks") and api_conf is not None:
+        api_rt = api_conf.get("reboot_timeout")
+        if api_rt is None or api_rt.total_milliseconds != 0:
+            # A device without a router network: ap_portal never reboots it for the missing router,
+            # but ESPHome's API does after 15 min without Home Assistant — even with a phone on the
+            # access point.
+            _LOGGER.warning(
+                "ap_portal: no router network in wifi: — this device lives on its access point, but "
+                "api: reboot_timeout (default 15min) reboots it whenever Home Assistant is not connected. "
+                "Set api: reboot_timeout: 0s."
+            )
+
     manual = ap.get(CONF_MANUAL_IP)
     if manual is None:
         _LOGGER.warning(
@@ -569,6 +582,11 @@ async def to_code(config):
     from esphome.components import wifi
 
     wifi.enable_runtime_roaming_suppression()  # ap_portal.scan pauses ESPHome's roaming scans
+    if "ota" in CORE.config:
+        # reboot without a router waits while an OTA upload runs
+        from esphome.components.ota import request_ota_state_listeners
+
+        request_ota_state_listeners()
     if "logger" in CORE.config:
         # the "log while away" ring: a failed router switch can be read once the device is back
         from esphome.components.logger import request_log_listener

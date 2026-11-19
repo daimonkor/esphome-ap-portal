@@ -21,6 +21,9 @@
 #include "esphome/core/gpio.h"
 #include "esphome/core/preferences.h"
 #include "ap_portal_core.h"
+#ifdef USE_OTA_STATE_LISTENER
+#include "esphome/components/ota/ota_backend.h"
+#endif
 
 namespace esphome::ap_portal {
 
@@ -331,6 +334,21 @@ class ApPortal : public Component, public AsyncWebHandler, public wifi::WiFiScan
   // Diagnostics: DNS questions and connectivity checks are logged (DEBUG) this long after a join.
   static constexpr uint32_t DIAG_WINDOW_MS = 60000;
   std::atomic<uint32_t> diag_until_{0};
+  bool reboot_armed_logged_{true};  // last "no reboot without a router" state written to the log
+  // Reboot without a router only after the router was reached once since boot: a network that never
+  // connected (a wrong one tried from the page on a device without a router) does not reboot it every
+  // 15 min, and a long outage costs one reboot, not one every 15 min (after it the router is "not yet
+  // seen" until it is back).
+  bool router_seen_{false};
+  std::atomic<uint32_t> last_ap_http_ms_{0};  // an access point client's last request: counts as a client
+#ifdef USE_OTA_STATE_LISTENER
+  struct OtaWatch : public ota::OTAGlobalStateListener {
+    std::atomic<bool> busy{false};
+    void on_ota_global_state(ota::OTAState state, float, uint8_t, ota::OTAComponent *) override {
+      this->busy = state == ota::OTA_STARTED || state == ota::OTA_IN_PROGRESS;
+    }
+  } ota_watch_;
+#endif
   std::atomic<uint32_t> sta_ip_now_{0};
   std::atomic<uint32_t> sta_ip_prev_{0};
   std::string switch_new_psk_;                 // same SSID, new password: still a switch to check

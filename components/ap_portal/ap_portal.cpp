@@ -208,6 +208,9 @@ void ApPortal::setup() {
   if (this->title_.empty())
     this->title_ = this->host_;
 
+#ifdef USE_OTA_STATE_LISTENER
+  ota::get_global_ota_callback()->add_global_state_listener(&this->ota_watch_);  // no reboot mid-upload
+#endif
   // Before web_server (setup priority 249): our handler is asked first.
   if (web_server_base::global_web_server_base != nullptr) {
     web_server_base::global_web_server_base->add_handler_without_auth(this);
@@ -726,7 +729,31 @@ void ApPortal::reboot_tick_(bool router, uint32_t now) {
     wifi::global_wifi_component->set_reboot_timeout(0);
     this->reboot_taken_ = true;
   }
-  if (this->reboot_timer_.update(router, this->client_count(), now)) {
+  auto *w = wifi::global_wifi_component;
+  if (router)
+    this->router_seen_ = true;
+  // Only with a router network to go back to (YAML or saved from the page, non-empty), Wi-Fi switched
+  // on, and that router reached once since boot (see router_seen_).
+  const bool has_net = w->has_sta() && !w->get_sta().get_ssid().empty();
+  const bool armed = has_net && !w->is_disabled() && this->router_seen_;
+  if (armed != this->reboot_armed_logged_) {
+    this->reboot_armed_logged_ = armed;
+    if (!armed)
+      ESP_LOGI(TAG, "No reboot without a router: %s",
+               w->is_disabled() ? "Wi-Fi is off"
+               : !has_net       ? "no router network set"
+                                : "the router was not reached since boot");
+  }
+  // Something running that a reboot would cut: a router switch or its fallback, an OTA upload, or an
+  // access point client that asked for a page within the last minute (a phone may drop the access
+  // point for a moment without internet).
+  bool busy = this->switch_pending_ || this->later_pending_ || this->fb_stage_ != 0 ||
+              !ap_portal_core::elapsed(now, this->last_ap_http_ms_.load(), 60000);
+#ifdef USE_OTA_STATE_LISTENER
+  busy = busy || this->ota_watch_.busy.load();
+#endif
+  const uint32_t clients = this->client_count() + (busy ? 1 : 0);
+  if (this->reboot_timer_.update(router, clients, now, armed)) {
     ESP_LOGW(TAG, "No router for %" PRIu32 " s and nobody on the access point: rebooting",
              this->reboot_timer_.timeout() / 1000);
     App.safe_reboot();
@@ -1417,6 +1444,8 @@ ApPortal::Classified ApPortal::classify_(AsyncWebServerRequest *request) {
     c.client_ip = v4_of(peer);
   r.from_ap = ap_ip != 0 && ap_mask != 0 && c.client_ip != 0 && ((c.client_ip ^ ap_ip) & ap_mask) == 0;
   c.from_ap = r.from_ap;
+  if (c.from_ap)
+    this->last_ap_http_ms_ = millis();
 
   if (r.from_ap && this->route_.mode == ap_portal_core::Mode::GATE) {
     std::lock_guard<std::mutex> g(this->mu_);

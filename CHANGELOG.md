@@ -9,6 +9,16 @@ Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monito
   ESPHome's own `wifi: ap: ap_mode: always_on` the two `ap_mode` keys were easy to mix up. The old
   name still works and maps to the new one with a warning at build time; both at once are refused.
   The `fallback: {after, off_when_idle}` block keeps its name.
+- Reboot without a router (when ap_portal raises the access point itself) runs only when it can help:
+  a non-empty router network is set (YAML or saved from the page), Wi-Fi is on, and the router was
+  reached since boot. A device that lives without a router, or kept a wrong network tried from the
+  page, is no longer rebooted every 15 min; a long router outage costs one reboot instead of one every
+  15 min. The interval stays `reboot_timeout` (default 15 min, `0s` off).
+- It also waits while a router switch or its fallback runs, while an OTA upload runs (OTA state
+  listener) and for a minute after an access point client's last page request (a phone may leave the
+  access point for a moment).
+- Build warning when a device has no router network but `api: reboot_timeout` is on (ESPHome would
+  still reboot it every 15 min without Home Assistant, phone on the access point or not).
 
 ## 0.1.3 — 2026-11-20
 

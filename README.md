@@ -212,7 +212,13 @@ Whenever ap_portal raises the access point itself (everything except `wifi: ap: 
 always_on`), ESPHome's "reboot without a router" cannot see that access point, so ap_portal takes it
 over: after `reboot_timeout` (default: `wifi: reboot_timeout`, 15 min) without a router and with
 **nobody** on the access point. A client stops the timer; it starts over when the last one leaves
-or the router comes back. A device that lives without a router sets `wifi: reboot_timeout: 0s`.
+or the router comes back. The timer also waits while a router switch or its fallback runs, while an
+OTA upload runs and for a minute after an access point client's last page request. It only runs once
+the router was reached since boot, with a non-empty router network set (YAML or saved from the page)
+and Wi-Fi switched on: a device that lives without a router (or tried a wrong network from the page)
+never reboots for it, and a long outage costs one reboot, not one every 15 min. `0s` turns it off.
+Such a device should also set `api: reboot_timeout: 0s` (ESPHome reboots after 15 min without Home
+Assistant otherwise; the build warns).
 `ap_raise: without_router` implies `keep_ap_on_connect`.
 
 The first router connection after boot can still move the access point to the router's channel
