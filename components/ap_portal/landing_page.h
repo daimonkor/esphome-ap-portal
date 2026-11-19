@@ -38,7 +38,8 @@ s('t',x[0]);{{#if primary_default}}s('p',x[1]);{{/if}}s('oa',x[2]);s('o1',x[3]);
 function copyText(t){try{if(navigator.clipboard&&window.isSecureContext){navigator.clipboard.writeText(t);return}}catch(e){}var a=document.createElement('textarea');a.value=t;a.setAttribute('readonly','');a.style.cssText='position:fixed;top:0;left:0;opacity:0';document.body.appendChild(a);a.select();a.setSelectionRange(0,t.length);try{document.execCommand('copy')}catch(e){}document.body.removeChild(a)}
 function onCopy(root,label){root.addEventListener('click',function(e){var a=e.target.closest&&e.target.closest('a.cp');if(!a)return;e.preventDefault();copyText(a.getAttribute('data-copy'));var o=a.textContent;a.textContent='\u2713 '+label;setTimeout(function(){a.textContent=o},1800)})}
 onCopy(document,(T[L]||[])[8]||'Copied');
-</script></body></html>
+{{#if secondary_default}}var sc=document.getElementById('sc');if(sc)sc.onclick=function(e){if(window.apPortalPopup){e.preventDefault();window.apPortalPopup.open()}};{{/if}}
+</script>{{#if secondary_default}}<script src="/ap_portal/popup.js" data-accent="{{accent_color}}" data-button="none"></script>{{/if}}</body></html>
 )HTML";
 
 // The built-in Wi-Fi page: the router network (scan list, connect) and the access point password.
@@ -242,7 +243,7 @@ function load(){if(!open)return;apPortal.networks().then(function(j){
   if(n.ssid==$('#ss').value)li.className='sel';li.onclick=function(){$('#ss').value=n.ssid;$('#pw').focus();load()};ls.appendChild(li)});
  if(open)again(j.scanning?1500:5000)}).catch(function(){if(!open)return;$('#st').innerHTML='<span class="m">'+esc(X.lost)+'</span>';again(3000)})}
 function show(v){open=v;bg.classList.toggle('on',v);if(v){apPortal.scan().then(function(){again(800)},function(){});load()}else clearTimeout(lt)}
-$('.fab').onclick=function(){show(true)};$('.x').onclick=function(){show(false)};bg.onclick=function(e){if(e.target===bg)show(false)};
+$('.fab').onclick=function(){show(true)};if(me&&me.dataset.button=='none')$('.fab').style.display='none';$('.x').onclick=function(){show(false)};bg.onclick=function(e){if(e.target===bg)show(false)};
 $('#rf').onclick=function(){apPortal.scan().then(function(){again(800)},function(e){fail(e.code||String(e.message||e))})};
 var tick=null;function busy(on){var b=$('#go');b.disabled=on;b.innerHTML=(on?'<span class="sp"></span>':'')+esc(X.go);
  clearInterval(tick);if(on)tick=setInterval(function(){var e=$('#tc');if(e)e.textContent=Math.round((Date.now()-busy.t)/1000)+' s'},500)}
