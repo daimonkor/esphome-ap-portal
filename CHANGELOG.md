@@ -4,6 +4,14 @@ Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monito
 
 ## Unreleased
 
+### Changed
+- Gate mode: the Wi-Fi page, popup and `/ap_portal/` API no longer wait for Enter — anyone on the
+  access point can press it anyway; the access point password is the protection.
+- The landing page's Wi-Fi button opens the popup in place (no page change for Back to return to).
+  `popup.js` takes `data-button="none"` (no corner button, `apPortalPopup.open()` only).
+- Wi-Fi page and popup: "Device is on …"; polled every 5 s while open (4 s timeout) and on return
+  to the tab, so a lost connection shows instead of a stale status.
+
 ### Security
 - Addresses and error codes from `/ap_portal/networks` (also the one at `<host>.local`, which any
   device on the network can answer) and from the saved pending switch are escaped and checked

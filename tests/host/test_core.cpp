@@ -349,11 +349,13 @@ static void test_wifi_routes() {
   r.path = "/wifi";
   CHECK(route(r, c) == Route::PASS);
   r.from_ap = true;
-  c.mode = Mode::GATE;  // gate: only with a pass
+  c.mode = Mode::GATE;  // gate: the Wi-Fi page and API need no pass (the AP password protects them)
+  CHECK(route(r, c) == Route::WIFI);
+  r.path = "/";  // the rest still waits for Enter
   CHECK(route(r, c) == Route::LANDING);
   r.get = false;
   r.path = "/ap_portal/connect";
-  CHECK(route(r, c) == Route::PASS);
+  CHECK(route(r, c) == Route::API);
   r.has_pass = true;
   CHECK(route(r, c) == Route::API);
   c.wifi_path.clear();  // page off, API on (a device with its own site)

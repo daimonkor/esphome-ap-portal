@@ -120,15 +120,13 @@ inline Route route(const Request &r, const RouteConfig &c) {
 inline Route route_inner(const Request &r, const RouteConfig &c) {
   if (!r.from_ap)
     return Route::PASS;  // the home network never sees the portal, the Wi-Fi page included
-  // The Wi-Fi page and its endpoints (GET and POST): access point clients only, in gate mode
-  // only with a pass.
+  // The Wi-Fi page and its endpoints (GET and POST): access point clients only. In gate mode too,
+  // without a pass: anyone on the access point can press Enter anyway — the access point password
+  // is the protection, and the landing page opens the Wi-Fi popup before Enter.
   const bool page = !c.wifi_path.empty() && r.path == c.wifi_path;
   const bool api = c.api && has_prefix(r.path, API_PREFIX);
-  if (page || api) {
-    if (c.mode == Mode::GATE && !r.has_pass)
-      return r.get ? Route::LANDING : Route::PASS;
+  if (page || api)
     return page ? (r.get ? Route::WIFI : Route::PASS) : Route::API;
-  }
   if (!r.get)
     return Route::PASS;
   if (c.mode == Mode::GATE) {

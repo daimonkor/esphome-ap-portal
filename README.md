@@ -94,7 +94,7 @@ ap_portal:
     firmware: true              # then to the network from the YAML (wifi: ssid / networks)
     # firmware: {ssid: Backup-Net, password: !secret backup}   # or a fallback network of its own
   on_router_fallback:           # to: "previous" / "firmware" / "none", ssid
-  wifi_page:                    # built-in /wifi page, access point clients only (gate: after the button)
+  wifi_page:                    # built-in /wifi page, access point clients only (gate too, no button needed)
     enabled: true               # scan list, connect to a router network, the access point password
     path: /wifi                 # the landing page's second button leads here unless you set `secondary`
     ap_password: true           # the access point password block
@@ -121,8 +121,9 @@ From lambdas: `id(portal).is_active()`, `client_count()`, `ap_ip()`, `ssid()`, `
 
 `/wifi` lists the networks around (a background scan while the router is connected), connects the
 device to a router network (saved by ESPHome, kept across reboots) and changes the access point
-password. Only clients of the access point get it — never the home network — and in gate mode only
-after the button. Its endpoints live under `/ap_portal/`. Turn it off with `wifi_page: {enabled:
+password. Only clients of the access point get it — never the home network; in gate mode before the
+button too (the access point password is the protection). The landing page's Wi-Fi button opens it
+as a popup in place. Its endpoints live under `/ap_portal/`. Turn it off with `wifi_page: {enabled:
 false}` when the device has its own Wi-Fi settings page.
 
 ### API for your own site
