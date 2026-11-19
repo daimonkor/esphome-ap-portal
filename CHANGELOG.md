@@ -2,6 +2,21 @@
 
 Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monitor) run on the library.
 
+## 0.1.3 — 2026-11-20
+
+### Added
+- Diagnostics in the log (DEBUG) for 60 s after a client joins the access point: the address it got
+  from DHCP, every DNS question it asks (name and type) and every connectivity check
+  (`captive.apple.com/hotspot-detect.html`, `/generate_204`, …) with the answer it gets
+  (`redirect`, `landing`, `pass`). Shows at once whether a phone looked for the portal at all.
+
+### Notes
+- iPhone (iOS 26) seen with this: with «Auto-Login» on for the network, iOS finds the portal but does
+  not open the sign-in window by itself (turning Auto-Login off opens it at once); for some private
+  Wi-Fi addresses it does not check for a portal at all, even after «Forget This Network». Neither
+  depends on the answer (302 and 200 behave the same). Put the access point address
+  (`http://<access point IP>`) on the device label as a second QR code.
+
 ## 0.1.2 — 2026-11-19
 
 ### Changed

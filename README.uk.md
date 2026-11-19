@@ -44,7 +44,7 @@ web_server:
   local: true                   # сторінка працює без інтернету
 
 external_components:
-  - source: github://daimonkor/esphome-ap-portal@v0.1.2
+  - source: github://daimonkor/esphome-ap-portal@v0.1.3
     components: [ap_portal]
 
 ap_portal:
