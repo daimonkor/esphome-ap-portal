@@ -32,8 +32,8 @@ a.s{display:block;color:inherit;text-decoration:none;border:1px solid rgba(127,1
 </div><div class="h" id="h">Tap an address to copy it, then paste it into your browser.</div>
 </div><script>
 var L=(navigator.language||'en').slice(0,2),T={
-uk:['Ви підключені до Wi-Fi пристрою.','Відкрити сторінку пристрою','Усі адреси','Wi-Fi пристрою','Домашня мережа','Домашня мережа (mDNS)','Натисніть адресу, щоб скопіювати, і вставте її в браузер.','Wi-Fi роутера','Скопійовано','Повна версія — у браузері (Safari): http://{{ap_ip}}/'],
-ru:['Вы подключены к Wi-Fi устройства.','Открыть страницу устройства','Все адреса','Wi-Fi устройства','Домашняя сеть','Домашняя сеть (mDNS)','Нажмите адрес, чтобы скопировать, и вставьте его в браузер.','Wi-Fi роутера','Скопировано','Полная версия — в браузере (Safari): http://{{ap_ip}}/']};
+uk:['Ви підключені до Wi-Fi пристрою.','Відкрити сторінку пристрою','Усі адреси','Wi-Fi пристрою','Домашня мережа','Домашня мережа (mDNS)','Натисніть адресу, щоб скопіювати, і вставте її в браузер.','Wi-Fi роутера','Скопійовано','Повна версія — у браузері (Safari): http://{{ap_ip}}/','Адресу скопійовано: вставте її в Safari. Натисніть ще раз, щоб відкрити тут.'],
+ru:['Вы подключены к Wi-Fi устройства.','Открыть страницу устройства','Все адреса','Wi-Fi устройства','Домашняя сеть','Домашняя сеть (mDNS)','Нажмите адрес, чтобы скопировать, и вставьте его в браузер.','Wi-Fi роутера','Скопировано','Полная версия — в браузере (Safari): http://{{ap_ip}}/','Адрес скопирован: вставьте его в Safari. Нажмите ещё раз, чтобы открыть здесь.']};
 if(T[L]){var x=T[L],g=function(i){return document.getElementById(i)},s=function(i,v){var e=g(i);if(e)e.textContent=v};
 s('t',x[0]);{{#if primary_default}}s('p',x[1]);{{/if}}s('oa',x[2]);s('o1',x[3]);s('o2',x[4]);s('o3',x[5]);s('h',x[6]);{{#if secondary_default}}s('sc',x[7]);{{/if}}s('ib',x[9]);}
 function copyText(t){try{if(navigator.clipboard&&window.isSecureContext){navigator.clipboard.writeText(t);return}}catch(e){}var a=document.createElement('textarea');a.value=t;a.setAttribute('readonly','');a.style.cssText='position:fixed;top:0;left:0;opacity:0';document.body.appendChild(a);a.select();a.setSelectionRange(0,t.length);try{document.execCommand('copy')}catch(e){}document.body.removeChild(a)}
@@ -43,7 +43,11 @@ onCopy(document,(T[L]||[])[8]||'Copied');
 // button hands the page to the phone's browser with an intent:// link, falling back to the plain link.
 // Apple's (iPhone, iPad, Mac) cannot open Safari on a network without internet: a hint with the address.
 (function(){var ua=navigator.userAgent,p=document.getElementById('p'),ib=document.getElementById('ib');
- if(/iPhone|iPad|iPod|Macintosh/.test(ua)&&!/Safari\/|Chrome|Firefox|Edg/.test(ua)&&ib)ib.style.display='block';
+ if(p&&/iPhone|iPad|iPod|Macintosh/.test(ua)&&!/Safari\/|Chrome|Firefox|Edg/.test(ua)){var armed=false;
+  if(ib)ib.style.display='block';
+  // First tap: the address goes to the clipboard (paste it into Safari); a second tap opens it here.
+  p.onclick=function(e){if(armed)return;e.preventDefault();armed=true;var u;try{u=new URL(p.getAttribute('href'),location.href).href}catch(x){u=p.href}
+   copyText(u);if(ib){ib.textContent=(T[L]||[])[10]||'Address copied: paste it into Safari. Tap again to open it here.';ib.style.display='block'}}}
  if(!p||!/Android/i.test(ua)||!/; wv\)/.test(ua))return;
  p.onclick=function(e){var u;try{u=new URL(p.getAttribute('href'),location.href)}catch(x){return}
   if(!/^https?:$/.test(u.protocol))return;e.preventDefault();var gone=false;
