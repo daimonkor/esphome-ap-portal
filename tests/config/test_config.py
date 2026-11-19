@@ -255,7 +255,7 @@ def test_good_config_has_no_ap_portal_warning(tmp_path):
 
 @on_tested
 def test_keep_ap_options_valid_without_warning_on_tested_esphome(tmp_path):
-    for opts in ("  keep_ap_on_connect: true\n", "  ap_mode: fallback\n  fallback: {after: 20s, off_when_idle: 2min}\n"):
+    for opts in ("  keep_ap_on_connect: true\n", "  ap_raise: without_router\n  fallback: {after: 20s, off_when_idle: 2min}\n"):
         r, out = run(tmp_path, head() + "ap_portal:\n" + opts)
         assert r.returncode == 0, out[-2000:]
         assert "has_ap_" not in out, out[-2000:]
@@ -291,6 +291,7 @@ def test_later_button_off_is_valid(tmp_path):
     "opts,needle",
     [
         ("  keep_ap_on_connect: true\n", "keep_ap_on_connect is not needed"),
+        ("  ap_raise: without_router\n", "use one of them"),
         ("  ap_mode: fallback\n", "use one of them"),
         ("  reboot_timeout: 5min\n", "remove ap_portal reboot_timeout"),
     ],
@@ -336,3 +337,29 @@ def test_wifi_ap_wisp_rejected(tmp_path):
     r, out = run(tmp_path, h + "ap_portal:\n")
     assert r.returncode != 0
     assert "WISP" in out, out[-2000:]
+
+
+def test_ap_raise_rejects_unknown(tmp_path):
+    r, out = run(tmp_path, head() + "ap_portal:\n  ap_raise: sometimes\n")
+    assert r.returncode != 0
+    assert "ap_raise" in out or "sometimes" in out, out[-2000:]
+
+
+@on_tested
+def test_ap_mode_old_name_still_works_with_warning(tmp_path):
+    r, out = run(tmp_path, head() + "ap_portal:\n  ap_mode: fallback\n")
+    assert r.returncode == 0, out[-2000:]
+    assert "renamed to ap_raise" in out and "ap_raise: without_router" in out, out[-2000:]
+
+
+def test_ap_mode_and_ap_raise_together_rejected(tmp_path):
+    r, out = run(tmp_path, head() + "ap_portal:\n  ap_mode: always\n  ap_raise: always\n")
+    assert r.returncode != 0
+    assert "old name of ap_raise" in out, out[-2000:]
+
+
+@on_tested
+def test_ap_raise_default_has_no_rename_warning(tmp_path):
+    r, out = run(tmp_path, head() + "ap_portal:\n  ap_raise: always\n")
+    assert r.returncode == 0, out[-2000:]
+    assert "renamed to ap_raise" not in out, out[-2000:]

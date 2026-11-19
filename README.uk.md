@@ -161,7 +161,7 @@ wifi:
 Точку піднімає й тримає сам ESPHome; ap_portal її не чіпає (сам не піднімає, `ap_timeout` ESPHome
 не змінює) і додає все інше. Без роутера ESPHome перезавантажується через `reboot_timeout`, лише
 поки на точці нікого немає. `ap_mode: WISP` заборонено (DNS ap_portal відібрав би в клієнтів
-інтернет); поруч з always_on заборонені `keep_ap_on_connect`, `ap_mode: fallback` і
+інтернет); поруч з always_on заборонені `keep_ap_on_connect`, `ap_raise: without_router` і
 `reboot_timeout` самого ap_portal.
 
 **ESPHome 2026.10 (або точка лише на час без роутера):**
@@ -178,7 +178,8 @@ wifi:
 ap_portal:
   keep_ap_on_connect: true
   reboot_timeout: 15min      # типово: wifi: reboot_timeout; 0s = ніколи
-  ap_mode: always            # або fallback: точка лише без роутера
+  ap_raise: always           # або without_router: точка лише без роутера
+                             # (раніше ap_mode: always / fallback — читається, з попередженням)
   fallback:
     after: 30s               # стільки без роутера — точка вмикається
     off_when_idle: 60s       # роутер повернувся і на точці нікого стільки — точка вимикається

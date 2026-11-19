@@ -2,6 +2,14 @@
 
 Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monitor) run on the library.
 
+## Unreleased
+
+### Changed
+- `ap_mode` is renamed to `ap_raise: always | without_router` (was `always | fallback`): next to
+  ESPHome's own `wifi: ap: ap_mode: always_on` the two `ap_mode` keys were easy to mix up. The old
+  name still works and maps to the new one with a warning at build time; both at once are refused.
+  The `fallback: {after, off_when_idle}` block keeps its name.
+
 ## 0.1.3 — 2026-11-20
 
 ### Added

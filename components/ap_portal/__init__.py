@@ -67,7 +67,8 @@ CONF_WIFI_PAGE = "wifi_page"
 CONF_API = "api"
 CONF_KEEP_AP_ON_CONNECT = "keep_ap_on_connect"
 CONF_REBOOT_TIMEOUT = "reboot_timeout"
-CONF_AP_MODE = "ap_mode"
+CONF_AP_MODE = "ap_mode"  # old name of ap_raise (0.1.x), still read
+CONF_AP_RAISE = "ap_raise"
 CONF_FALLBACK = "fallback"
 CONF_AFTER = "after"
 CONF_OFF_WHEN_IDLE = "off_when_idle"
@@ -300,6 +301,23 @@ def _validate_landing(config):
     return config
 
 
+def _ap_raise(config):
+    """ap_raise (new) / ap_mode (old name, 0.1.x): one value in config[CONF_AP_RAISE]."""
+    old = config.pop(CONF_AP_MODE, None)
+    if old is not None:
+        if CONF_AP_RAISE in config:
+            raise cv.Invalid("ap_portal: ap_mode is the old name of ap_raise — use one of them (ap_raise)")
+        new = "without_router" if old == "fallback" else "always"
+        _LOGGER.warning(
+            "ap_portal: ap_mode is renamed to ap_raise (it was easy to mix up with ESPHome's wifi: ap: ap_mode); "
+            "write ap_raise: %s. The old name still works.",
+            new,
+        )
+        config[CONF_AP_RAISE] = new
+    config.setdefault(CONF_AP_RAISE, "always")
+    return config
+
+
 CONFIG_SCHEMA = cv.All(
     cv.Schema(
         {
@@ -318,8 +336,10 @@ CONFIG_SCHEMA = cv.All(
             # with keep_ap_on_connect: reboot after this long without a router and with nobody on
             # the access point. Default: wifi: reboot_timeout (15 min). 0s = never.
             cv.Optional(CONF_REBOOT_TIMEOUT): cv.positive_time_period_milliseconds,
-            # always: the access point runs whenever `active`; fallback: only without a router
-            cv.Optional(CONF_AP_MODE, default="always"): cv.one_of("always", "fallback", lower=True),
+            # always: the access point runs whenever `active`; without_router: only without a router.
+            # (Was ap_mode: always / fallback — easy to mix up with ESPHome's wifi: ap: ap_mode.)
+            cv.Optional(CONF_AP_RAISE): cv.one_of("always", "without_router", lower=True),
+            cv.Optional(CONF_AP_MODE): cv.one_of("always", "fallback", lower=True),
             cv.Optional(CONF_FALLBACK, default={}): cv.Schema(
                 {
                     cv.Optional(CONF_AFTER, default="30s"): cv.positive_time_period_milliseconds,
@@ -392,6 +412,7 @@ CONFIG_SCHEMA = cv.All(
             ),
         }
     ).extend(cv.COMPONENT_SCHEMA),
+    _ap_raise,
     cv.only_on_esp32,
     cv.only_with_framework("esp-idf"),
 )
@@ -444,7 +465,7 @@ def _final_validate(config):
             "wifi: ap: ap_mode: WISP gives the access point's clients the router's internet; ap_portal "
             "answers every DNS name with the device itself, so they would get none. Use ALWAYS_ON."
         )
-    if (config[CONF_KEEP_AP_ON_CONNECT] or config[CONF_AP_MODE] == "fallback") and wifi_conf.get(
+    if (config[CONF_KEEP_AP_ON_CONNECT] or config[CONF_AP_RAISE] == "without_router") and wifi_conf.get(
         "post_connect_roaming", False
     ):
         _LOGGER.warning(
@@ -478,9 +499,9 @@ def _final_validate(config):
                 f"keep_ap_on_connect is not needed with wifi: ap: ap_mode: {wifi_ap_mode} — ESPHome keeps the "
                 "access point on router connections itself; remove one of them"
             )
-        if config[CONF_AP_MODE] == "fallback":
+        if config[CONF_AP_RAISE] == "without_router":
             raise cv.Invalid(
-                f"ap_portal ap_mode: fallback switches the access point off, wifi: ap: ap_mode: {wifi_ap_mode} keeps "
+                f"ap_portal ap_raise: without_router switches the access point off, wifi: ap: ap_mode: {wifi_ap_mode} keeps "
                 "it on; use one of them"
             )
         if CONF_REBOOT_TIMEOUT in config:
@@ -514,13 +535,13 @@ def _final_validate(config):
             TESTED_ESPHOME,
             ESPHOME_VERSION,
         )
-        if config[CONF_KEEP_AP_ON_CONNECT] or config[CONF_AP_MODE] == "fallback":
+        if config[CONF_KEEP_AP_ON_CONNECT] or config[CONF_AP_RAISE] == "without_router":
             _LOGGER.warning(
                 "ap_portal: keep_ap_on_connect%s clears ESPHome's private WiFiComponent::has_ap_, "
                 "checked on ESPHome 2026.10.x-%s.x. On %s check after flashing: the log shows "
                 "'Access point kept on router connections', there is no 'Disabling AP' when the "
                 "router connects, and the device does not reboot without a router.",
-                " (implied by ap_mode: fallback)" if not config[CONF_KEEP_AP_ON_CONNECT] else "",
+                " (implied by ap_raise: without_router)" if not config[CONF_KEEP_AP_ON_CONNECT] else "",
                 TESTED_ESPHOME,
                 ESPHOME_VERSION,
             )
@@ -608,7 +629,7 @@ async def to_code(config):
         wifi_rt = CORE.config.get("wifi", {}).get("reboot_timeout")
         reboot_ms = wifi_rt.total_milliseconds if wifi_rt is not None else 15 * 60 * 1000
     cg.add(var.set_reboot_timeout(reboot_ms))
-    if config[CONF_AP_MODE] == "fallback":
+    if config[CONF_AP_RAISE] == "without_router":
         apf = config[CONF_FALLBACK]
         cg.add(var.set_ap_fallback(apf[CONF_AFTER].total_milliseconds, apf[CONF_OFF_WHEN_IDLE].total_milliseconds))
     fb = config[CONF_ROUTER_FALLBACK]

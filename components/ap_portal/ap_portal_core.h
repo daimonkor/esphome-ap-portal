@@ -647,7 +647,7 @@ inline uint8_t switch_streak(uint8_t prev_reason, uint8_t prev_streak, uint8_t r
   return 1;
 }
 
-// ───────────────────────────── access point only without a router (ap_mode: fallback) ─────────────────────────────
+// ───────────────────────────── access point only without a router (ap_raise: without_router) ─────────────────────────────
 // Up once there has been no router for `after`. Router back: down only after nobody has been on the
 // access point for `idle` — a phone in the middle of something is never thrown off.
 // keep_ap_on_connect hides ESPHome's access point flag, which also switches off ESPHome's own

@@ -306,7 +306,7 @@ void ApPortal::loop() {
     const bool want = this->fallback_ap_.update(router, this->client_count(), now);
     if (want != this->fallback_was_) {
       this->fallback_was_ = want;
-      ESP_LOGI(TAG, "%s", want ? "No router: access point up (ap_mode: fallback)"
+      ESP_LOGI(TAG, "%s", want ? "No router: access point up (ap_raise: without_router)"
                               : "Router back and nobody on the access point: access point down");
     }
     if (!want) {

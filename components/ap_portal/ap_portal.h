@@ -299,7 +299,7 @@ class ApPortal : public Component, public AsyncWebHandler, public wifi::WiFiScan
   std::string later_ssid_, later_psk_, later_old_ssid_, later_old_psk_, later_ssid_snap_;
   bool http_sta_later_{false};
   bool later_button_{true};  // "Save, connect later" shown (networks JSON tells the pages)
-  // keep_ap_on_connect / ap_mode: fallback
+  // keep_ap_on_connect / ap_raise: without_router
   bool keep_ap_on_connect_{false};
   bool has_ap_hidden_{false};
   bool ap_fallback_{false};

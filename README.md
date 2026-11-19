@@ -185,7 +185,7 @@ ESPHome then raises the access point and keeps it on router connections; ap_port
 (no own raise, ESPHome's `ap_timeout` untouched) and adds everything else. ESPHome reboots after
 `reboot_timeout` without a router only while nobody is on the access point. `ap_mode: WISP` is
 rejected (ap_portal's DNS would take the clients' internet away); `keep_ap_on_connect`, ap_portal's
-`ap_mode: fallback` and its `reboot_timeout` are rejected next to it.
+`ap_raise: without_router` and its `reboot_timeout` are rejected next to it.
 
 **ESPHome 2026.10 (or a fallback-only access point):**
 
@@ -201,7 +201,8 @@ rejected (ap_portal's DNS would take the clients' internet away); `keep_ap_on_co
 ap_portal:
   keep_ap_on_connect: true
   reboot_timeout: 15min      # default: wifi: reboot_timeout; 0s = never
-  ap_mode: always            # or fallback: the access point only without a router
+  ap_raise: always           # or without_router: the access point only without a router
+                             # (was ap_mode: always / fallback — still read, with a warning)
   fallback:
     after: 30s               # no router this long: access point up
     off_when_idle: 60s       # router back and nobody on it this long: access point down
@@ -212,7 +213,7 @@ always_on`), ESPHome's "reboot without a router" cannot see that access point, s
 over: after `reboot_timeout` (default: `wifi: reboot_timeout`, 15 min) without a router and with
 **nobody** on the access point. A client stops the timer; it starts over when the last one leaves
 or the router comes back. A device that lives without a router sets `wifi: reboot_timeout: 0s`.
-`ap_mode: fallback` implies `keep_ap_on_connect`.
+`ap_raise: without_router` implies `keep_ap_on_connect`.
 
 The first router connection after boot can still move the access point to the router's channel
 (one radio) — a client on it drops for a second.
