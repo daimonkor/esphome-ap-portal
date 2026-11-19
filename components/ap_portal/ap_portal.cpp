@@ -100,6 +100,20 @@ template<typename Tag, typename Tag::type M> struct HasApRobber {
   friend typename Tag::type has_ap_member(Tag) { return M; }
 };
 template struct HasApRobber<HasApTag, &wifi::WiFiComponent::has_ap_>;
+
+// Router switch: ESPHome connects from its last scan results when it has any (SCAN_CONNECTING with
+// a non-empty list does not scan again) and takes the first one — the old network, sorted first as
+// "matching" before the switch. The first attempt then goes to the old access point with the new
+// password and fails (2026-11-19: every other switch failed once, then worked). Dropping the list
+// makes ESPHome scan for the new network. WiFiComponent::release_scan_results_ is private.
+struct ReleaseScanTag {
+  using type = void (wifi::WiFiComponent::*)();
+};
+ReleaseScanTag::type release_scan_member(ReleaseScanTag);
+template<typename Tag, typename Tag::type M> struct ReleaseScanRobber {
+  friend typename Tag::type release_scan_member(Tag) { return M; }
+};
+template struct ReleaseScanRobber<ReleaseScanTag, &wifi::WiFiComponent::release_scan_results_>;
 }  // namespace
 
 static constexpr uint32_t PASSWORD_APPLY_DELAY_MS = 2000;  // the HTTP answer leaves first
@@ -357,9 +371,18 @@ void ApPortal::on_wifi_event_(void *arg, esp_event_base_t, int32_t id, void *dat
     case WIFI_EVENT_SCAN_DONE:
       ev.type = EV_SCAN_DONE;
       break;
-    case WIFI_EVENT_STA_DISCONNECTED:
-      self->sta_reason_ = static_cast<wifi_event_sta_disconnected_t *>(data)->reason;
+    case WIFI_EVENT_STA_DISCONNECTED: {
+      const uint8_t r = static_cast<wifi_event_sta_disconnected_t *>(data)->reason;
+      self->sta_reason_ = r;
+      if (self->switch_pending_ && r != 8) {  // 8: our own leave
+        const uint8_t n = self->sw_fails_.load();
+        if (n < 6)
+          self->sw_reasons_[n] = r;
+        if (n < 255)
+          self->sw_fails_ = n + 1;
+      }
       return;
+    }
     case WIFI_EVENT_STA_CONNECTED:
       self->sta_reason_ = 0;
       return;
@@ -532,17 +555,21 @@ void ApPortal::configure_dhcp_() {
   if (apn == nullptr)
     return;
   this->dhcp_done_ = true;
-  const auto ap = wifi::global_wifi_component->get_ap();
   esp_netif_ip_info_t info{};
+  bool have_manual = false;
+#ifdef USE_WIFI_MANUAL_IP  // get_manual_ip() exists only when some network sets manual_ip
+  const auto ap = wifi::global_wifi_component->get_ap();
   const auto manual = ap.get_manual_ip();  // a copy: newer ESPHome returns it by value
   if (manual.has_value()) {
     const auto mi = *manual;
     info.ip = (esp_ip4_addr_t) mi.static_ip;
     info.gw = (esp_ip4_addr_t) mi.gateway;
     info.netmask = (esp_ip4_addr_t) mi.subnet;
-  } else {
-    esp_netif_get_ip_info(apn, &info);  // ESP-IDF default, 192.168.4.1
+    have_manual = true;
   }
+#endif
+  if (!have_manual)
+    esp_netif_get_ip_info(apn, &info);  // ESP-IDF default, 192.168.4.1
   esp_netif_dhcps_stop(apn);
   esp_err_t e = esp_netif_set_ip_info(apn, &info);
   const uint32_t net = info.ip.addr & info.netmask.addr;  // network byte order
@@ -787,6 +814,8 @@ void ApPortal::switch_start_(const std::string &ssid, const std::string &psk, ui
   }
   this->check_save_(ssid, this->switch_old_ssid_, this->switch_old_psk_);
   this->switch_target_ = ssid;
+  this->sw_fails_ = 0;
+  this->sw_started_ms_ = now;
   this->switch_pending_ = true;
   this->switch_deadline_ = now + this->fb_timeout_;
   this->switch_reconnect_(ssid, psk);
@@ -800,8 +829,30 @@ void ApPortal::switch_reconnect_(const std::string &ssid, const std::string &psk
   auto *w = wifi::global_wifi_component;
   const bool was_connected = w->is_connected();
   w->save_wifi_sta(ssid, psk);  // saved by ESPHome, kept across reboots; reconnects only if not connected
+  // Stale scan results would send the first attempt to the old network (see ReleaseScanTag). The
+  // release honours keep_scan_results, which the network list sets, so it is lifted for the call.
+  w->set_keep_scan_results(false);
+  (w->*release_scan_member(ReleaseScanTag{}))();
+  w->set_keep_scan_results(this->route_.api);  // codegen asks to keep them when the API is on
+  ESP_LOGD(TAG, "Wi-Fi page: scan results dropped, ESPHome scans for '%s'", ssid.c_str());
   if (was_connected)
     esp_wifi_disconnect();
+}
+
+void ApPortal::log_switch_reasons_(const char *what) {
+  const uint8_t n = this->sw_fails_.load();
+  char list[6 * 5 + 1] = "";
+  size_t at = 0;
+  for (uint8_t i = 0; i < n && i < 6; i++)
+    at += snprintf(list + at, sizeof(list) - at, "%s%u", i ? "," : "", (unsigned) this->sw_reasons_[i].load());
+  if (n == 0) {
+    ESP_LOGI(TAG, "Wi-Fi page: %s '%s' in %u ms", what, this->switch_target_.c_str(),
+             (unsigned) (millis() - this->sw_started_ms_));
+  } else {
+    ESP_LOGW(TAG, "Wi-Fi page: %s '%s' in %u ms after %u failed attempt(s), reasons %s%s", what,
+             this->switch_target_.c_str(), (unsigned) (millis() - this->sw_started_ms_), (unsigned) n, list,
+             n > 6 ? ",…" : "");
+  }
 }
 
 void ApPortal::switch_tick_(uint32_t now) {
@@ -809,8 +860,8 @@ void ApPortal::switch_tick_(uint32_t now) {
     return;
   auto *w = wifi::global_wifi_component;
   if (w->is_connected() && connected_ssid() == this->switch_target_) {
-    ESP_LOGI(TAG, "Wi-Fi page: connected to '%s'", this->switch_target_.c_str());
     this->switch_pending_ = false;
+    this->log_switch_reasons_("connected");
     this->check_erase_();  // the new network works, nothing to check after a restart
     return;
   }
@@ -821,6 +872,7 @@ void ApPortal::switch_tick_(uint32_t now) {
     ESP_LOGW(TAG, "Wi-Fi page: '%s' did not connect, nothing to fall back to", this->switch_target_.c_str());
     return;
   }
+  this->log_switch_reasons_("gave up");
   ESP_LOGW(TAG, "Wi-Fi page: '%s' did not connect in %u s (%s), back to '%s'", this->switch_target_.c_str(),
            (unsigned) (this->fb_timeout_ / 1000), ap_portal_core::sta_error_kind(this->sta_reason_.load()),
            this->switch_old_ssid_.c_str());
@@ -1363,7 +1415,9 @@ void ApPortal::send_networks_(AsyncWebServerRequest *request) {
       json_escape_into_buffer(esc, StringRef(target.c_str(), target.size()));
       const bool on_target = connected && connected_ssid() == target;
       out += ",\"target\":\"" + std::string(esc) + "\",\"sta_error\":\"" +
-             (on_target ? "" : ap_portal_core::sta_error_kind(this->sta_reason_.load())) + "\"";
+             (on_target ? "" : ap_portal_core::sta_error_kind(this->sta_reason_.load())) + "\"" +
+             ",\"sta_reason\":" + to_string((unsigned) this->sta_reason_.load()) +
+             ",\"fails\":" + to_string((unsigned) this->sw_fails_.load());
       std::string prev;
       bool reverted, queued;
       {

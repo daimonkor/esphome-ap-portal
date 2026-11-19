@@ -318,6 +318,12 @@ class ApPortal : public Component, public AsyncWebHandler {
   uint8_t http_later_cmd_{0};  // 1 apply, 2 cancel
   bool switch_reverted_{false};
   std::atomic<uint8_t> sta_reason_{0};      // last router disconnect reason, from the event task
+  // Disconnect reasons during a switch from the page (event task writes, main loop logs): why the
+  // first attempt fails is otherwise lost — the log is unreachable while the device is elsewhere.
+  std::atomic<uint8_t> sw_reasons_[6]{};
+  std::atomic<uint8_t> sw_fails_{0};
+  uint32_t sw_started_ms_{0};
+  void log_switch_reasons_(const char *what);
   bool http_ap_pw_pending_{false};
   bool http_ap_pw_reset_{false};
   std::string http_ap_pw_;

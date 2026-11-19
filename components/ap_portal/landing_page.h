@@ -145,7 +145,7 @@ function follow(p){busy.t=p.t;busy(true);toast('<b>'+t('going1')+' «'+esc(p.ssi
  apPortal.watch(p.ssid,{host:p.host,since:p.t}).then(function(x){busy(false);return x},function(e){busy(false);throw e}).then(function(x){apPortal.pending.clear();g('pw').value='';
   if(x.onAp)toast('<b>'+t('found')+' «'+esc(p.ssid)+'»</b>'+addrs([{kind:'new',url:x.url}])+'<div class="m">'+t('stayap')+'</div>');
   else toast('<b>'+t('found')+' «'+esc(p.ssid)+'»: '+esc(x.ip)+'</b>',{url:x.url,label:t('open')})})
- .catch(function(e){apPortal.pending.clear();if(e.code)toast('<b class="er">'+t('err')+' «'+esc(p.ssid)+'»: '+esc(t(e.code))+'</b><div class="m">'+(e.previous?t('back')+' «'+esc(e.previous)+'».':t('stay'))+'</div>');else toast('<b>'+t('lost')+'</b>'+addrs(p.addresses))})}
+ .catch(function(e){apPortal.pending.clear();if(e.code)toast('<b class="er">'+t('err')+' «'+esc(p.ssid)+'»: '+esc(t(e.code))+(e.reason>0?' ('+(e.reason|0)+')':'')+'</b><div class="m">'+(e.previous?t('back')+' «'+esc(e.previous)+'».':t('stay'))+'</div>');else toast('<b>'+t('lost')+'</b>'+addrs(p.addresses))})}
 // Field check before sending; the device answers with the same codes (shown the same way).
 function fail(box,code,field){var m=g(box);m.className='m err';m.textContent=t(code)||code;if(field){g(field).classList.add('bad');g(field).focus()}}
 function clr(box){var m=g(box);m.className='m';m.textContent='';['ss','pw','ap'].forEach(function(i){var e=g(i);if(e)e.classList.remove('bad')})}
@@ -208,7 +208,7 @@ watch:function(ssid,o){o=o||{};var t0=o.since||Date.now(),lim=o.timeout||90000,i
   (function next(){if(i>=u.length)return setTimeout(tick,iv);var c=window.AbortController?new AbortController():null,k=setTimeout(function(){if(c)c.abort()},2500),n=i;
    j(u[i++],c?{signal:c.signal}:{}).then(function(s){clearTimeout(k);if(s.connected&&s.ssid===ssid&&/^\d{1,3}(\.\d{1,3}){3}$/.test(s.ip))return res({ip:s.ip,url:'http://'+s.ip+'/',state:s,
      onAp:n===0&&location.hostname===s.ap_ip});
-    if(s.target===ssid&&(s.sta_error||s.reverted)){if(s.reverted||(!s.pending&&++bad>=2)||(s.pending&&s.sta_error==='wrong_password'&&++bad>=5)){var ec=/^[a-z0-9_]{1,32}$/.test(s.sta_error||'')?s.sta_error:'failed';var e=new Error(ec);e.code=ec;e.previous=s.previous;return rej(e)}}else bad=0;next()}).catch(function(){clearTimeout(k);next()})})()})()})},
+    if(s.target===ssid&&(s.sta_error||s.reverted)){if(s.reverted||(!s.pending&&++bad>=2)||(s.pending&&s.sta_error==='wrong_password'&&++bad>=5)){var ec=/^[a-z0-9_]{1,32}$/.test(s.sta_error||'')?s.sta_error:'failed';var e=new Error(ec);e.code=ec;e.previous=s.previous;e.reason=s.sta_reason;return rej(e)}}else bad=0;next()}).catch(function(){clearTimeout(k);next()})})()})()})},
 pending:{key:'apPortalWatch',save:function(o){try{localStorage.setItem(this.key,JSON.stringify(o))}catch(e){}},
  load:function(){try{var o=JSON.parse(localStorage.getItem(this.key)||'null');return o&&Date.now()-o.t<180000?o:null}catch(e){return null}},
  clear:function(){try{localStorage.removeItem(this.key)}catch(e){}}},
@@ -276,7 +276,7 @@ function follow(p){busy.t=p.t;busy(true);toast('<b>'+X.g1+' «'+esc(p.ssid)+'»�
  apPortal.watch(p.ssid,{host:p.host,since:p.t}).then(function(x){busy(false);return x},function(e){busy(false);throw e}).then(function(x){apPortal.pending.clear();$('#pw').value='';
   if(x.onAp)toast('<b>'+X.found+' «'+esc(p.ssid)+'»</b>'+addrs([{kind:'new',url:x.url}])+'<div class="m">'+X.sap+'</div>');
   else toast('<b>'+X.found+' «'+esc(p.ssid)+'»: '+esc(x.ip)+'</b>',x.url)})
- .catch(function(e){apPortal.pending.clear();if(e.code)toast('<b class="er">'+X.err+' «'+esc(p.ssid)+'»: '+esc(X[e.code]||e.code)+'</b><div class="m">'+(e.previous?X.back+' «'+esc(e.previous)+'».':X.stay)+'</div>');else toast('<b>'+X.lost+'</b>'+addrs(p.addresses))})}
+ .catch(function(e){apPortal.pending.clear();if(e.code)toast('<b class="er">'+X.err+' «'+esc(p.ssid)+'»: '+esc(X[e.code]||e.code)+(e.reason>0?' ('+(e.reason|0)+')':'')+'</b><div class="m">'+(e.previous?X.back+' «'+esc(e.previous)+'».':X.stay)+'</div>');else toast('<b>'+X.lost+'</b>'+addrs(p.addresses))})}
 function fail(code,field){var m=$('#cm');m.className='m err';m.textContent=X[code]||code;if(field){$(field).classList.add('bad');$(field).focus()}}
 function sta(){var m=$('#cm');m.className='m';m.textContent='';$('#ss').classList.remove('bad');$('#pw').classList.remove('bad');
  var s=$('#ss').value,c=apPortal.check.ssid(s);if(c){fail(c,'#ss');return null}c=apPortal.check.psk($('#pw').value);if(c){fail(c,'#pw');return null}return s}

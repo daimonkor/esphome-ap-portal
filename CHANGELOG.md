@@ -30,6 +30,9 @@ Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monito
   one slot.
 
 ### Fixed
+- Router switch from the page failed every other time: ESPHome took its first attempt from its last scan list, where the old network sorted first, and went to the old access point with the new password. The list is dropped on a switch, so ESPHome scans for the new network.
+- Builds without any `manual_ip` failed (`get_manual_ip` exists only with `USE_WIFI_MANUAL_IP`).
+- The log names the failed attempts of a switch («connected 'X' in N ms after K failed attempt(s), reasons …»); the error on the page shows the reason code.
 - A router switch from the page failed at once if an earlier switch had fallen back: the stale `reverted` flag is cleared when a new switch is requested; `pending` is also true while the request waits to start.
 - Status while switching shows «Connecting to «X»…» (or «back to «Y»…») with a spinner instead of «Not connected to the router».
 - Switching routers from the page no longer reports «connection failed» on a first failed attempt: the networks JSON says `pending` while the device still tries, and the page waits for the result (or the fallback); only a wrong password repeated for ~15 s is reported early.
