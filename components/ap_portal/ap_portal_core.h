@@ -794,4 +794,24 @@ inline bool cors_allowed(const std::string &origin, uint32_t ap_ip_be, const std
   return false;
 }
 
+
+// ── One Wi-Fi action at a time ──
+// While the device scans, switches routers or changes its access point password, a second action
+// (another tab, another phone) would cut into it: a pick from a list being replaced, a scan in the
+// middle of a switch, the access point restarting under a switch. The page locks its buttons; the
+// device answers 409 {"error":"busy"} as well. Cancelling a saved network is always allowed; a scan
+// asked for while one runs is the same scan (no error).
+enum class ApiAction : uint8_t { SCAN, CONNECT, APPLY, AP_PASSWORD, CANCEL };
+
+inline bool api_busy(ApiAction a, bool scanning, bool switching, bool password_pending) {
+  switch (a) {
+    case ApiAction::CANCEL:
+      return false;
+    case ApiAction::SCAN:
+      return switching || password_pending;
+    default:
+      return scanning || switching || password_pending;
+  }
+}
+
 }  // namespace ap_portal_core

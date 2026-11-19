@@ -571,7 +571,32 @@ static void test_cors() {
   CHECK(cors_allowed("http://192.168.1.89", 0, host, sta, 0));
 }
 
+
+static void test_api_busy() {
+  using ap_portal_core::api_busy;
+  using A = ap_portal_core::ApiAction;
+  // idle: everything goes
+  for (A a : {A::SCAN, A::CONNECT, A::APPLY, A::AP_PASSWORD, A::CANCEL})
+    CHECK(!api_busy(a, false, false, false));
+  // scanning: no connect / apply / password; a second scan is the same scan
+  CHECK(!api_busy(A::SCAN, true, false, false));
+  CHECK(api_busy(A::CONNECT, true, false, false));
+  CHECK(api_busy(A::APPLY, true, false, false));
+  CHECK(api_busy(A::AP_PASSWORD, true, false, false));
+  // switching: nothing but cancel
+  CHECK(api_busy(A::SCAN, false, true, false));
+  CHECK(api_busy(A::CONNECT, false, true, false));
+  CHECK(api_busy(A::APPLY, false, true, false));
+  CHECK(api_busy(A::AP_PASSWORD, false, true, false));
+  CHECK(!api_busy(A::CANCEL, true, true, true));
+  // access point password being applied: the access point restarts, wait
+  CHECK(api_busy(A::SCAN, false, false, true));
+  CHECK(api_busy(A::CONNECT, false, false, true));
+  CHECK(api_busy(A::AP_PASSWORD, false, false, true));
+}
+
 int main() {
+  test_api_busy();
   test_cors();
   test_csrf();
   test_timers();

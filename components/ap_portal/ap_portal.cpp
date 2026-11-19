@@ -1578,6 +1578,27 @@ void ApPortal::handle_api_(AsyncWebServerRequest *request, const Classified &c) 
       return;
     }
   }
+  {
+    using ap_portal_core::ApiAction;
+    const ApiAction act = p == a + "scan"                                       ? ApiAction::SCAN
+                          : p == a + "connect"                                  ? ApiAction::CONNECT
+                          : p == a + "apply"                                    ? ApiAction::APPLY
+                          : p == a + "ap_password" || p == a + "ap_password_reset" ? ApiAction::AP_PASSWORD
+                                                                                : ApiAction::CANCEL;
+    bool scanning, switching, pw;
+    {
+      std::lock_guard<std::mutex> g(this->mu_);
+      scanning = this->scanning_ || this->http_scan_;
+      switching = this->switch_pending_ || (this->http_sta_pending_ && !this->http_sta_later_) ||
+                  this->http_later_cmd_ == 1;
+      pw = this->http_ap_pw_pending_ || this->password_pending_;
+    }
+    if (ap_portal_core::api_busy(act, scanning, switching, pw)) {
+      ESP_LOGI(TAG, "POST %s refused: busy (scan %d, switch %d, password %d)", p.c_str(), scanning, switching, pw);
+      this->send_api_error_(request, "busy", 409);
+      return;
+    }
+  }
   if (p == a + "scan") {
     std::lock_guard<std::mutex> g(this->mu_);
     this->http_scan_ = true;
@@ -1651,6 +1672,7 @@ void ApPortal::send_api_error_(AsyncWebServerRequest *request, const char *code,
   httpd_req_t *h = *request;  // 405 is not among the codes AsyncWebServerRequest knows
   httpd_resp_set_status(h, status == 404   ? "404 Not Found"
                           : status == 403 ? "403 Forbidden"
+                          : status == 409 ? "409 Conflict"
                                           : "405 Method Not Allowed");
   httpd_resp_set_type(h, "application/json");
   httpd_resp_send(h, body.c_str(), body.size());

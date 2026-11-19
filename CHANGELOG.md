@@ -4,6 +4,15 @@ Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monito
 
 ## 0.1.2 — 2026-11-19
 
+### Changed
+- One Wi-Fi action at a time. While the device scans, switches routers or applies a new access point
+  password, the popup and the Wi-Fi page lock the network list, «Connect now», «Search again», the
+  saved-network buttons and the access point password (the fields too while a switch runs), with a
+  spinner and a «wait…» line; «Close» stays. The device refuses such requests itself with
+  `409 {"error":"busy"}` (another tab or phone can't cut in); cancelling a saved network always works,
+  a scan asked for during a scan is the same scan.
+- jsdom tests for the popup and the Wi-Fi page locks in CI.
+
 ### Security
 - Reading the API from another web page: ESPHome answers everything with
   `Access-Control-Allow-Origin: *`, so any site open in a browser on the home network (or on an
