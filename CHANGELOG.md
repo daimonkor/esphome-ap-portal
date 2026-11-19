@@ -28,6 +28,8 @@ Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monito
   one slot.
 
 ### Fixed
+- The network list showed only the configured network: ap_portal now asks ESPHome to keep every scan record (and reads them under ESPHome's scan-results lock).
+- "Search again" shows a spinner and is disabled while the device scans (popup and /wifi page).
 - Crash (out of memory, `std::bad_alloc`) on an ESP32-C3 with BLE when a page loaded `popup.js`:
   it was built as one ~22 KB string and copied again by the response. `client.js` / `popup.js` are
   now gzip-compressed at build time and sent from flash (~8 KB, no heap); rendered pages and JSON

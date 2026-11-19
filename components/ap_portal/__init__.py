@@ -543,6 +543,12 @@ async def to_code(config):
     from esphome.components import wifi
 
     wifi.enable_runtime_roaming_suppression()  # ap_portal.scan pauses ESPHome's roaming scans
+    if config[CONF_API][CONF_ENABLED]:
+        # The network list needs every scan record, not only the configured network's (ESPHome
+        # otherwise filters them and, with one network, scans for its SSID alone); the HTTP
+        # handler reads them from the web server task, so under ESPHome's lock.
+        wifi.request_wifi_scan_results()
+        wifi.request_wifi_scan_results_lock()
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
 

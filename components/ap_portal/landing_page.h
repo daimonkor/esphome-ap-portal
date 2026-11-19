@@ -129,11 +129,12 @@ var lt=0;function again(ms){clearTimeout(lt);lt=setTimeout(load,ms)}
 function load(){apPortal.networks().then(function(j){
  later(j.later);g('st').innerHTML='';var s=document.createElement('span');s.className=j.connected?'ok':'m';
  s.textContent=j.connected?t('con')+j.ssid+' · '+j.ip+' · '+j.rssi+' dBm':t('none');g('st').appendChild(s);
- var ls=g('ls');ls.innerHTML='';if(!j.networks.length){var e=document.createElement('li');e.className='m';e.textContent=j.scanning?(X.ld||'Searching…'):t('empty');ls.appendChild(e)}
+ rfb(!!j.scanning);var ls=g('ls');ls.innerHTML='';if(!j.networks.length){var e=document.createElement('li');e.className='m';e.innerHTML=(j.scanning?'<span class="sp"></span>':'')+esc(j.scanning?(X.ld||'Searching…'):t('empty'));ls.appendChild(e)}
  j.networks.forEach(function(n){var li=document.createElement('li');var a=document.createElement('span');a.textContent=n.ssid;if(n.lock){var l=document.createElement('span');l.className='lk';l.textContent='🔒';a.appendChild(l)}var b=document.createElement('span');b.className='m';b.textContent=bars(n.rssi);
   li.appendChild(a);li.appendChild(b);if(n.ssid==g('ss').value)li.className='sel';li.onclick=function(){g('ss').value=n.ssid;g('pw').focus();load()};ls.appendChild(li)});
- again(j.scanning?1500:5000)}).catch(function(){g('st').innerHTML='';var s=document.createElement('span');s.className='m';s.textContent=t('lost');g('st').appendChild(s);again(3000)})}
-function scan(){apPortal.scan().then(function(){again(800)},function(e){fail('cm',e.code||String(e.message||e))})}
+ again(j.scanning?1500:5000)}).catch(function(){rfb(false);g('st').innerHTML='';var s=document.createElement('span');s.className='m';s.textContent=t('lost');g('st').appendChild(s);again(3000)})}
+function rfb(on){var b=g('rf');b.disabled=on;b.innerHTML=on?'<span class="sp"></span>'+esc(X.ld||'Searching…'):esc(X.rf||'Search again')}
+function scan(){rfb(true);apPortal.scan().then(function(){again(800)},function(e){rfb(false);fail('cm',e.code||String(e.message||e))})}
 var tick=null;function busy(on){var b=g('cn');b.disabled=on;b.innerHTML=on?'<span class="sp"></span>'+esc(X.cn||'Connect now'):esc(X.cn||'Connect now');
  clearInterval(tick);if(on)tick=setInterval(function(){var e=g('tc');if(e)e.textContent=Math.round((Date.now()-busy.t)/1000)+' s'},500)}
 function follow(p){busy.t=p.t;busy(true);toast('<b>'+t('going1')+' «'+esc(p.ssid)+'»… <span id="tc"></span></b><div class="m">'+t('going2')+'</div>'+addrs(p.addresses)+'<div class="m">'+t('phone')+'</div>',null,true);
@@ -254,15 +255,16 @@ onCopy(R,X.cop);
 function toast(h,btn,wait){var e=$('#tt');e.innerHTML='<div class="tc">'+(wait?'<span class="sp big"></span>':'')+h+(btn?'<a class="o" href="'+esc(btn)+'">'+X.open+'</a>':'')+(wait?'':'<button class="s" id="tx">'+X.close+'</button>')+'</div>';
  e.style.display='flex';var x=$('#tx');if(x)x.onclick=function(){e.style.display='none'}}
 var lt=0;function again(ms){clearTimeout(lt);lt=setTimeout(load,ms)}
+function rfb(on){var b=$('#rf');b.disabled=on;b.innerHTML=on?'<span class="sp"></span>'+esc(X.srch):esc(X.again)}
 function load(){if(!open)return;apPortal.networks().then(function(j){
  later(j.later);$('#st').innerHTML=j.connected?'<span class="ok">'+esc(X.con+j.ssid+' · '+j.ip+' · '+j.rssi+' dBm')+'</span>':esc(X.none);
- var ls=$('#ls');ls.innerHTML='';if(!j.networks.length)ls.innerHTML='<li class="m">'+(j.scanning?X.srch:X.empty)+'</li>';
+ rfb(!!j.scanning);var ls=$('#ls');ls.innerHTML='';if(!j.networks.length)ls.innerHTML='<li class="m">'+(j.scanning?'<span class="sp"></span>'+esc(X.srch):esc(X.empty))+'</li>';
  j.networks.forEach(function(n){var li=document.createElement('li');li.innerHTML='<span>'+esc(n.ssid)+(n.lock?'<span class="lk">🔒</span>':'')+'</span><span class="m">'+bars(n.rssi)+'</span>';
   if(n.ssid==$('#ss').value)li.className='sel';li.onclick=function(){$('#ss').value=n.ssid;$('#pw').focus();load()};ls.appendChild(li)});
- if(open)again(j.scanning?1500:5000)}).catch(function(){if(!open)return;$('#st').innerHTML='<span class="m">'+esc(X.lost)+'</span>';again(3000)})}
-function show(v){open=v;bg.classList.toggle('on',v);if(v){apPortal.scan().then(function(){again(800)},function(){});load()}else clearTimeout(lt)}
+ if(open)again(j.scanning?1500:5000)}).catch(function(){if(!open)return;rfb(false);$('#st').innerHTML='<span class="m">'+esc(X.lost)+'</span>';again(3000)})}
+function show(v){open=v;bg.classList.toggle('on',v);if(v){rfb(true);apPortal.scan().then(function(){again(800)},function(){});load()}else clearTimeout(lt)}
 $('.fab').onclick=function(){show(true)};if(me&&me.dataset.button=='none')$('.fab').style.display='none';$('.x').onclick=function(){show(false)};bg.onclick=function(e){if(e.target===bg)show(false)};
-$('#rf').onclick=function(){apPortal.scan().then(function(){again(800)},function(e){fail(e.code||String(e.message||e))})};
+$('#rf').onclick=function(){rfb(true);apPortal.scan().then(function(){again(800)},function(e){rfb(false);fail(e.code||String(e.message||e))})};
 var tick=null;function busy(on){var b=$('#go');b.disabled=on;b.innerHTML=(on?'<span class="sp"></span>':'')+esc(X.go);
  clearInterval(tick);if(on)tick=setInterval(function(){var e=$('#tc');if(e)e.textContent=Math.round((Date.now()-busy.t)/1000)+' s'},500)}
 function follow(p){busy.t=p.t;busy(true);toast('<b>'+X.g1+' «'+esc(p.ssid)+'»… <span id="tc"></span></b><div class="m">'+X.g2+'</div>'+addrs(p.addresses)+'<div class="m">'+X.ph+'</div>',null,true);
