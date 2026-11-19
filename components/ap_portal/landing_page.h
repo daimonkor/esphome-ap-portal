@@ -47,8 +47,9 @@ onCopy(document,(T[L]||[])[8]||'Copied');
   if(ib)ib.style.display='block';
   // The address goes to the clipboard (for Safari), then the page opens here as the fallback.
   p.onclick=function(e){e.preventDefault();var u;try{u=new URL(p.getAttribute('href'),location.href).href}catch(x){u=p.href}
-   copyText(u);if(ib){ib.textContent=(T[L]||[])[10]||'Address copied: paste it into Safari for the full version.';ib.style.display='block'}
-   setTimeout(function(){location.href=u},1200)}}
+   copyText(u);var o=p.textContent;p.textContent='\u2713 '+((T[L]||[])[8]||'Copied');
+   if(ib){ib.textContent=(T[L]||[])[10]||'Address copied: paste it into Safari for the full version.';ib.style.display='block'}
+   setTimeout(function(){location.href=u},1200);setTimeout(function(){p.textContent=o},2500)}}
  if(!p||!/Android/i.test(ua)||!/; wv\)/.test(ua))return;
  p.onclick=function(e){var u;try{u=new URL(p.getAttribute('href'),location.href)}catch(x){return}
   if(!/^https?:$/.test(u.protocol))return;e.preventDefault();var gone=false;
