@@ -595,7 +595,29 @@ static void test_api_busy() {
   CHECK(api_busy(A::AP_PASSWORD, false, false, true));
 }
 
+
+static void test_dns_qname() {
+  using ap_portal_core::dns_qname;
+  // captive.apple.com, type A
+  const uint8_t q[] = {0x12,0x34, 0x01,0x00, 0,1, 0,0, 0,0, 0,0,
+                       7,'c','a','p','t','i','v','e', 5,'a','p','p','l','e', 3,'c','o','m', 0, 0,1, 0,1};
+  char name[64]; uint16_t t = 0;
+  CHECK(dns_qname(q, sizeof(q), name, sizeof(name), &t));
+  CHECK(std::string(name) == "captive.apple.com" && t == 1);
+  // HTTPS (65)
+  uint8_t h[sizeof(q)]; std::memcpy(h, q, sizeof(q)); h[sizeof(q) - 3] = 65;
+  CHECK(dns_qname(h, sizeof(h), name, sizeof(name), &t) && t == 65);
+  // truncated / compressed / tiny buffer stay safe
+  CHECK(!dns_qname(q, 20, name, sizeof(name), &t));
+  uint8_t c[sizeof(q)]; std::memcpy(c, q, sizeof(q)); c[12] = 0xC0;
+  CHECK(!dns_qname(c, sizeof(c), name, sizeof(name), &t));
+  char small[6];
+  CHECK(dns_qname(q, sizeof(q), small, sizeof(small), &t) && std::strlen(small) == 5);
+  CHECK(std::string(ap_portal_core::route_name(ap_portal_core::Route::REDIRECT)) == "redirect");
+}
+
 int main() {
+  test_dns_qname();
   test_api_busy();
   test_cors();
   test_csrf();

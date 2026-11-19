@@ -328,6 +328,9 @@ class ApPortal : public Component, public AsyncWebHandler, public wifi::WiFiScan
   std::atomic<uint8_t> sw_last_reason_{0};
   std::atomic<bool> sw_fresh_connect_{false};  // STA_CONNECTED seen since the switch started
   // Router-side addresses for the CORS check (web server task reads them): now and the one before.
+  // Diagnostics: DNS questions and connectivity checks are logged (DEBUG) this long after a join.
+  static constexpr uint32_t DIAG_WINDOW_MS = 60000;
+  std::atomic<uint32_t> diag_until_{0};
   std::atomic<uint32_t> sta_ip_now_{0};
   std::atomic<uint32_t> sta_ip_prev_{0};
   std::string switch_new_psk_;                 // same SSID, new password: still a switch to check

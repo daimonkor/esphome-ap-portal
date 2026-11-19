@@ -814,4 +814,50 @@ inline bool api_busy(ApiAction a, bool scanning, bool switching, bool password_p
   }
 }
 
+
+// Question name of a DNS query as text ("captive.apple.com") and its type; false when malformed.
+inline bool dns_qname(const uint8_t *q, size_t n, char *out, size_t cap, uint16_t *qtype) {
+  if (n < 13 || cap < 2)
+    return false;
+  size_t p = 12, o = 0;
+  while (p < n && q[p] != 0) {
+    const size_t l = q[p];
+    if ((l & 0xC0) != 0 || p + 1 + l > n)
+      return false;
+    if (o != 0 && o + 1 < cap)
+      out[o++] = '.';
+    for (size_t i = 0; i < l && o + 1 < cap; i++) {
+      const char ch = (char) q[p + 1 + i];
+      out[o++] = (ch >= 0x21 && ch <= 0x7E) ? ch : '?';
+    }
+    p += l + 1;
+  }
+  if (p + 3 > n)
+    return false;
+  out[o] = 0;
+  if (qtype != nullptr)
+    *qtype = (uint16_t) (q[p + 1] << 8 | q[p + 2]);
+  return true;
+}
+
+inline const char *route_name(Route r) {
+  switch (r) {
+    case Route::LANDING:
+      return "landing";
+    case Route::REDIRECT:
+      return "redirect";
+    case Route::ENTER:
+      return "enter";
+    case Route::WRAP:
+      return "wrap";
+    case Route::WIFI:
+      return "wifi page";
+    case Route::API:
+      return "api";
+    case Route::PASS:
+      return "pass (ESPHome answers)";
+  }
+  return "?";
+}
+
 }  // namespace ap_portal_core

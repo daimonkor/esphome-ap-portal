@@ -449,6 +449,7 @@ void ApPortal::drain_events_() {
   while (xQueueReceive(this->events_, &ev, 0) == pdTRUE) {
     if (ev.type == EV_JOIN) {
       ESP_LOGD(TAG, "Client %s joined", mac_str(ev.mac).c_str());
+      this->diag_until_ = millis() + DIAG_WINDOW_MS;  // DNS queries and probes of a new client go to the log
       this->on_client_connected_.call(mac_str(ev.mac));
     } else if (ev.type == EV_LEAVE) {
       ESP_LOGD(TAG, "Client %s left", mac_str(ev.mac).c_str());
@@ -464,6 +465,7 @@ void ApPortal::drain_events_() {
     } else if (ev.type == EV_IP) {
       ap_portal_core::Mac m;
       std::memcpy(m.b, ev.mac, 6);
+      ESP_LOGD(TAG, "Client %s got %s", mac_str(ev.mac).c_str(), ip_str(ev.ip).c_str());
       std::lock_guard<std::mutex> g(this->mu_);
       this->clients_.set(ev.ip, m);
     } else if (ev.type == EV_SCAN_DONE) {
@@ -692,6 +694,14 @@ void ApPortal::dns_tick_() {
     const int n = ::recvfrom(this->dns_sock_, buf, sizeof(buf) - 16, 0, reinterpret_cast<sockaddr *>(&from), &fl);
     if (n <= 0)
       return;
+    if (!ap_portal_core::reached(millis(), this->diag_until_.load())) {
+      // A new client's DNS questions (name and type): shows whether a phone looks for its
+      // connectivity check at all (iOS: captive.apple.com) and what it asks for.
+      char name[96];
+      uint16_t qtype = 0;
+      if (ap_portal_core::dns_qname(buf, (size_t) n, name, sizeof(name), &qtype))
+        ESP_LOGD(TAG, "DNS %s type %u from %s", name, qtype, ip_str(from.sin_addr.s_addr).c_str());
+    }
     const size_t len = ap_portal_core::dns_answer(buf, (size_t) n, buf, sizeof(buf), ip);
     if (len > 0)
       ::sendto(this->dns_sock_, buf, len, 0, reinterpret_cast<sockaddr *>(&from), fl);
@@ -1416,6 +1426,13 @@ ApPortal::Classified ApPortal::classify_(AsyncWebServerRequest *request) {
   auto *cp = captive_portal::global_captive_portal;
   c.claim = ap_portal_core::claim(c.route, r.get, cp != nullptr && cp->is_active());
 
+  if (r.from_ap && (ap_portal_core::is_probe_path(c.path) || ap_portal_core::is_foreign_host(r.host)) &&
+      !ap_portal_core::reached(millis(), this->diag_until_.load())) {
+    // A connectivity check (or any foreign host) right after a client joined: what the phone asked
+    // and what it gets — the sign-in window opens only if this is not the "internet works" answer.
+    ESP_LOGD(TAG, "Check %s %s%s from %s -> %s", r.get ? "GET" : "POST", r.host.c_str(), c.path.c_str(),
+             ip_str(c.client_ip).c_str(), ap_portal_core::route_name(c.route));
+  }
   if (r.get && r.from_ap) {
     bool log = true;
     for (const auto &p : this->log_exclude_prefixes_)
