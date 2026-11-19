@@ -206,7 +206,7 @@ watch:function(ssid,o){o=o||{};var t0=o.since||Date.now(),lim=o.timeout||90000,i
   (function next(){if(i>=u.length)return setTimeout(tick,iv);var c=window.AbortController?new AbortController():null,k=setTimeout(function(){if(c)c.abort()},2500),n=i;
    j(u[i++],c?{signal:c.signal}:{}).then(function(s){clearTimeout(k);if(s.connected&&s.ssid===ssid&&/^\d{1,3}(\.\d{1,3}){3}$/.test(s.ip))return res({ip:s.ip,url:'http://'+s.ip+'/',state:s,
      onAp:n===0&&location.hostname===s.ap_ip});
-    if(s.target===ssid&&(s.sta_error||s.reverted)){if(s.reverted||++bad>=2){var ec=/^[a-z0-9_]{1,32}$/.test(s.sta_error||'')?s.sta_error:'failed';var e=new Error(ec);e.code=ec;e.previous=s.previous;return rej(e)}}else bad=0;next()}).catch(function(){clearTimeout(k);next()})})()})()})},
+    if(s.target===ssid&&(s.sta_error||s.reverted)){if(s.reverted||(!s.pending&&++bad>=2)||(s.pending&&s.sta_error==='wrong_password'&&++bad>=5)){var ec=/^[a-z0-9_]{1,32}$/.test(s.sta_error||'')?s.sta_error:'failed';var e=new Error(ec);e.code=ec;e.previous=s.previous;return rej(e)}}else bad=0;next()}).catch(function(){clearTimeout(k);next()})})()})()})},
 pending:{key:'apPortalWatch',save:function(o){try{localStorage.setItem(this.key,JSON.stringify(o))}catch(e){}},
  load:function(){try{var o=JSON.parse(localStorage.getItem(this.key)||'null');return o&&Date.now()-o.t<180000?o:null}catch(e){return null}},
  clear:function(){try{localStorage.removeItem(this.key)}catch(e){}}},

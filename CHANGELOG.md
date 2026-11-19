@@ -29,6 +29,7 @@ Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monito
   one slot.
 
 ### Fixed
+- Switching routers from the page no longer reports «connection failed» on a first failed attempt: the networks JSON says `pending` while the device still tries, and the page waits for the result (or the fallback); only a wrong password repeated for ~15 s is reported early.
 - client.js / popup.js are sent with `Cache-Control: no-cache` and an ETag (build hash): after a reflash the phone takes the new script at once instead of keeping the old one for 5 minutes; unchanged scripts answer 304.
 - No rectangular tap highlight on phones (landing, /wifi page, popup); a pressed button dims instead, focus rings only for the keyboard.
 - The network list showed only the configured network: ap_portal now asks ESPHome to keep every scan record (and reads them under ESPHome's scan-results lock).

@@ -1371,6 +1371,9 @@ void ApPortal::send_networks_(AsyncWebServerRequest *request) {
       }
       json_escape_into_buffer(esc, StringRef(prev.c_str(), prev.size()));
       out += ",\"previous\":\"" + std::string(esc) + "\",\"reverted\":" + (reverted ? "true" : "false");
+      // Still trying: ESPHome retries until the switch deadline, a first failed attempt is common
+      // (2026-11-19: "failed" reported, connected 4 s later), so the page waits for the verdict.
+      out += std::string(",\"pending\":") + (this->switch_pending_ ? "true" : "false");
     }
   }
   {

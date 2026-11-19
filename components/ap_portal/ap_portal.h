@@ -285,7 +285,7 @@ class ApPortal : public Component, public AsyncWebHandler {
   uint32_t http_sta_at_{0};
   std::string target_ssid_;                 // the network the page asked for (under mu_)
   // switching the router network, loop() only; previous/reverted also read by HTTP (under mu_)
-  bool switch_pending_{false};
+  std::atomic<bool> switch_pending_{false};  // read by the web server task (networks JSON)
   uint32_t switch_deadline_{0};
   std::string switch_target_, switch_old_ssid_, switch_old_psk_;
   std::string switch_previous_;
