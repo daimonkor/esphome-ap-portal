@@ -130,7 +130,9 @@ onCopy(document,t('copied'));
 var lt=0;function again(ms){clearTimeout(lt);lt=setTimeout(load,ms)}
 function load(){apPortal.networks().then(function(j){
  later(j.later);g('st').innerHTML='';var s=document.createElement('span');s.className=j.connected?'ok':'m';
- s.textContent=j.connected?t('con')+j.ssid+' · '+j.ip+' · '+j.rssi+' dBm':t('none');g('st').appendChild(s);
+ var sw=j.pending&&j.target&&!(j.connected&&j.ssid===j.target),rv=!j.connected&&!sw&&j.reverted&&j.previous;
+ s.textContent=j.connected?t('con')+j.ssid+' · '+j.ip+' · '+j.rssi+' dBm':sw||rv?'':t('none');g('st').appendChild(s);
+ if(sw||rv){var q=document.createElement('div');q.className='m';q.innerHTML='<span class="sp"></span>'+esc((rv?t('back')+' «'+j.previous:t('going1')+' «'+j.target)+'»…');g('st').appendChild(q)}
  rfb(!!j.scanning);var ls=g('ls');ls.innerHTML='';if(!j.networks.length){var e=document.createElement('li');e.className='m';e.innerHTML=(j.scanning?'<span class="sp"></span>':'')+esc(j.scanning?(X.ld||'Searching…'):t('empty'));ls.appendChild(e)}
  j.networks.forEach(function(n){var li=document.createElement('li');var cur=j.connected&&n.ssid==j.ssid;var a=document.createElement('span');a.textContent=n.ssid;if(n.lock){var l=document.createElement('span');l.className='lk';l.textContent='🔒';a.appendChild(l)}if(cur){var c=document.createElement('span');c.className='cu';c.textContent='✓ '+(X.cur||'connected');a.appendChild(c)}var b=document.createElement('span');b.className='m';b.textContent=bars(n.rssi);
   li.appendChild(a);li.appendChild(b);if(cur){li.className='cur';li.setAttribute('aria-disabled','true')}else{if(n.ssid==g('ss').value)li.className='sel';li.onclick=function(){g('ss').value=n.ssid;g('pw').focus();load()}}ls.appendChild(li)});
@@ -259,7 +261,8 @@ function toast(h,btn,wait){var e=$('#tt');e.innerHTML='<div class="tc">'+(wait?'
 var lt=0;function again(ms){clearTimeout(lt);lt=setTimeout(load,ms)}
 function rfb(on){var b=$('#rf');b.disabled=on;b.innerHTML=on?'<span class="sp"></span>'+esc(X.srch):esc(X.again)}
 function load(){if(!open)return;apPortal.networks().then(function(j){
- later(j.later);$('#st').innerHTML=j.connected?'<span class="ok">'+esc(X.con+j.ssid+' · '+j.ip+' · '+j.rssi+' dBm')+'</span>':esc(X.none);
+ later(j.later);var sw=j.pending&&j.target&&!(j.connected&&j.ssid===j.target),rv=!j.connected&&!sw&&j.reverted&&j.previous;
+ $('#st').innerHTML=(j.connected?'<span class="ok">'+esc(X.con+j.ssid+' · '+j.ip+' · '+j.rssi+' dBm')+'</span>':sw||rv?'':esc(X.none))+(sw||rv?'<div class="m"><span class="sp"></span>'+esc((rv?X.back+' «'+j.previous:X.g1+' «'+j.target)+'»…')+'</div>':'');
  rfb(!!j.scanning);var ls=$('#ls');ls.innerHTML='';if(!j.networks.length)ls.innerHTML='<li class="m">'+(j.scanning?'<span class="sp"></span>'+esc(X.srch):esc(X.empty))+'</li>';
  j.networks.forEach(function(n){var li=document.createElement('li');var cur=j.connected&&n.ssid==j.ssid;li.innerHTML='<span>'+esc(n.ssid)+(n.lock?'<span class="lk">🔒</span>':'')+(cur?'<span class="cu">✓ '+esc(X.cur)+'</span>':'')+'</span><span class="m">'+bars(n.rssi)+'</span>';
   if(cur){li.className='cur';li.setAttribute('aria-disabled','true')}else{if(n.ssid==$('#ss').value)li.className='sel';li.onclick=function(){$('#ss').value=n.ssid;$('#pw').focus();load()}}ls.appendChild(li)});

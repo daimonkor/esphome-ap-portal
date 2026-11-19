@@ -29,6 +29,8 @@ Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monito
   one slot.
 
 ### Fixed
+- A router switch from the page failed at once if an earlier switch had fallen back: the stale `reverted` flag is cleared when a new switch is requested; `pending` is also true while the request waits to start.
+- Status while switching shows «Connecting to «X»…» (or «back to «Y»…») with a spinner instead of «Not connected to the router».
 - Switching routers from the page no longer reports «connection failed» on a first failed attempt: the networks JSON says `pending` while the device still tries, and the page waits for the result (or the fallback); only a wrong password repeated for ~15 s is reported early.
 - client.js / popup.js are sent with `Cache-Control: no-cache` and an ETag (build hash): after a reflash the phone takes the new script at once instead of keeping the old one for 5 minutes; unchanged scripts answer 304.
 - No rectangular tap highlight on phones (landing, /wifi page, popup); a pressed button dims instead, focus rings only for the keyboard.

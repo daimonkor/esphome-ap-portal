@@ -868,6 +868,7 @@ void ApPortal::later_apply_(uint32_t now, const char *why) {
     this->later_ssid_snap_.clear();
     this->target_ssid_ = this->later_ssid_;
     this->sta_reason_ = 0;
+    this->switch_reverted_ = false;
   }
   this->switch_start_(this->later_ssid_, this->later_psk_, now, &this->later_old_ssid_, &this->later_old_psk_);
   this->later_psk_.clear();
@@ -1282,6 +1283,7 @@ void ApPortal::handle_api_(AsyncWebServerRequest *request, const Classified &c) 
     if (!later) {
       this->target_ssid_ = ssid;  // the page asks how this one goes
       this->sta_reason_ = 0;
+      this->switch_reverted_ = false;  // a revert of an earlier switch is no answer for this one
     }
     this->http_sta_at_ = millis() + (later ? 0 : PASSWORD_APPLY_DELAY_MS);  // the answer leaves first
     this->http_sta_pending_ = true;
@@ -1363,17 +1365,18 @@ void ApPortal::send_networks_(AsyncWebServerRequest *request) {
       out += ",\"target\":\"" + std::string(esc) + "\",\"sta_error\":\"" +
              (on_target ? "" : ap_portal_core::sta_error_kind(this->sta_reason_.load())) + "\"";
       std::string prev;
-      bool reverted;
+      bool reverted, queued;
       {
         std::lock_guard<std::mutex> g(this->mu_);
         prev = this->switch_previous_;
         reverted = this->switch_reverted_;
+        queued = this->http_sta_pending_ && !this->http_sta_later_;  // accepted, starts in a moment
       }
       json_escape_into_buffer(esc, StringRef(prev.c_str(), prev.size()));
       out += ",\"previous\":\"" + std::string(esc) + "\",\"reverted\":" + (reverted ? "true" : "false");
       // Still trying: ESPHome retries until the switch deadline, a first failed attempt is common
       // (2026-11-19: "failed" reported, connected 4 s later), so the page waits for the verdict.
-      out += std::string(",\"pending\":") + (this->switch_pending_ ? "true" : "false");
+      out += std::string(",\"pending\":") + (this->switch_pending_ || queued ? "true" : "false");
     }
   }
   {
