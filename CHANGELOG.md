@@ -8,7 +8,7 @@ Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monito
 - Gate mode: the Wi-Fi page, popup and `/ap_portal/` API no longer wait for Enter — anyone on the
   access point can press it anyway; the access point password is the protection.
 - Landing page in a sign-in window (Android, iPhone, iPad, Mac): the main button opens the page right
-  there and copies its address ("✓ Copied"), so it is not lost. Android also gets "Open in the
+  there and copies the device's address, marked "✓ Copied" on its link below, so it is not lost. Android also gets "Open in the
   browser ↗" (`intent://`) with a note that the sign-in prompt won't come back, and how to return
   (the access point address, or any `http://` address while on its Wi-Fi). iPhone/Mac: a hint to
   paste the address into Safari for the full version.

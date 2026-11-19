@@ -42,7 +42,7 @@ function copyText(t){try{if(navigator.clipboard&&window.isSecureContext){navigat
 function onCopy(root,label){root.addEventListener('click',function(e){var a=e.target.closest&&e.target.closest('a.cp');if(!a)return;e.preventDefault();copyText(a.getAttribute('data-copy'));var o=a.textContent;a.textContent='\u2713 '+label;setTimeout(function(){a.textContent=o},1800)})}
 onCopy(document,(T[L]||[])[8]||'Copied');
 // The sign-in window is a cut-down browser. Its main button opens the page right there and copies
-// the address (so it is not lost). Android's (a WebView) also gets "Open in the browser ↗" — an
+// the device's address, marked on its link below (so it is not lost). Android's (a WebView) also gets "Open in the browser ↗" — an
 // intent:// link to the phone's browser; after it the sign-in prompt does not come back, which the
 // note under it says. Apple's (iPhone, iPad, Mac) cannot open Safari on a network without internet.
 (function(){var ua=navigator.userAgent,p=document.getElementById('p'),ib=document.getElementById('ib'),
@@ -50,10 +50,11 @@ onCopy(document,(T[L]||[])[8]||'Copied');
  var droid=/Android/i.test(ua)&&/; wv\)/.test(ua),apple=/iPhone|iPad|iPod|Macintosh/.test(ua)&&!/Safari\/|Chrome|Firefox|Edg/.test(ua);
  if(!p||!(droid||apple))return;
  var abs=function(){try{return new URL(p.getAttribute('href'),location.href)}catch(e){return null}};
- p.onclick=function(e){var u=abs();if(!u)return;e.preventDefault();copyText(u.href);
-  p.textContent='✓ '+(x[8]||'Copied');
-  if(ib){ib.textContent=(x[10]||'Address copied:')+' '+u.href;ib.style.display='block'}
-  setTimeout(function(){location.href=u.href},1200)};
+ // The button opens the page here; the device's address is copied and its link below shows
+ // "✓ Copied", as a tap on the link itself does.
+ p.onclick=function(e){var u=abs();if(!u)return;e.preventDefault();var a=document.querySelector('a.cp');
+  if(a){copyText(a.getAttribute('data-copy'));a.textContent='✓ '+(x[8]||'Copied')}
+  setTimeout(function(){location.href=u.href},900)};
  if(apple&&ib)ib.style.display='block';
  if(!droid||!br)return;
  br.style.display='block';if(bh)bh.style.display='block';
