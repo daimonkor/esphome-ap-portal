@@ -320,6 +320,12 @@ class ApPortal : public Component, public AsyncWebHandler, public wifi::WiFiScan
   uint32_t fb_deadline_{0};
   std::string fb_new_, fb_old_ssid_, fb_old_psk_, fw_ssid_, fw_psk_;
   ESPPreferenceObject check_pref_;
+  // Last router network the device was connected to (fallback source while ESPHome has none selected)
+  ESPPreferenceObject last_good_pref_;
+  ap_portal_core::NetCred last_good_;
+  bool last_good_loaded_{false};
+  void last_good_tick_(bool router);
+  ap_portal_core::NetCred previous_network_();
   bool check_saved_{false};
   uint8_t http_later_cmd_{0};  // 1 apply, 2 cancel
   bool switch_reverted_{false};

@@ -280,6 +280,7 @@ void ApPortal::loop() {
       this->sta_ip_now_ = si.ip.addr;
     }
   }
+  this->last_good_tick_(router);
   this->reboot_tick_(router, now);
   if (!this->running_)
     return;
@@ -876,9 +877,9 @@ void ApPortal::switch_start_(const std::string &ssid, const std::string &psk, ui
     this->switch_old_ssid_ = *old_ssid;
     this->switch_old_psk_ = *old_psk;
   } else if (!this->switch_pending_) {  // a second request keeps the first fallback
-    const auto old = w->get_sta();
-    this->switch_old_ssid_ = std::string(old.get_ssid().c_str(), old.get_ssid().size());
-    this->switch_old_psk_ = std::string(old.get_password().c_str(), old.get_password().size());
+    const auto old = this->previous_network_();
+    this->switch_old_ssid_ = old.ssid;
+    this->switch_old_psk_ = old.psk;
   }
   ESP_LOGI(TAG, "Wi-Fi page: switching to the router network '%s' (fallback '%s' in %u s)", ssid.c_str(),
            this->switch_old_ssid_.c_str(), (unsigned) (this->fb_timeout_ / 1000));
@@ -1173,9 +1174,9 @@ static constexpr uint32_t LATER_IDLE_MS = 10000;
 void ApPortal::later_save_(const std::string &ssid, const std::string &psk) {
   auto *w = wifi::global_wifi_component;
   if (!this->later_pending_) {
-    const auto old = w->get_sta();
-    this->later_old_ssid_ = std::string(old.get_ssid().c_str(), old.get_ssid().size());
-    this->later_old_psk_ = std::string(old.get_password().c_str(), old.get_password().size());
+    const auto old = this->previous_network_();
+    this->later_old_ssid_ = old.ssid;
+    this->later_old_psk_ = old.psk;
   }
   this->later_ssid_ = ssid;
   this->later_psk_ = psk;
@@ -1238,6 +1239,53 @@ void ApPortal::later_tick_(uint32_t now) {
 // restart, if the device gets no router within `timeout`, it goes back step by step: the previous
 // network, then the one from the YAML (each step `timeout` long), then gives up ("none": it keeps
 // its own access point and quiet mode). Any router connection ends the check.
+// ───────────────────────────── last router network ─────────────────────────────
+// Kept so a switch from the page started during a router outage (ESPHome has no network selected
+// then) still has something to fall back to. Written to flash only when the network changes.
+static constexpr uint32_t LAST_GOOD_MAGIC = 0xA9F0C0E2;
+struct LastGoodRecord {
+  uint32_t magic;
+  char ssid[33];
+  char psk[65];
+};
+
+void ApPortal::last_good_tick_(bool router) {
+  if (!this->last_good_loaded_) {
+    this->last_good_loaded_ = true;
+    this->last_good_pref_ = global_preferences->make_preference<LastGoodRecord>(fnv1_hash("ap_portal_last_router"));
+    LastGoodRecord rec{};
+    if (this->last_good_pref_.load(&rec) && rec.magic == LAST_GOOD_MAGIC) {
+      rec.ssid[32] = rec.psk[64] = 0;
+      this->last_good_.ssid = rec.ssid;
+      this->last_good_.psk = rec.psk;
+    }
+  }
+  if (!router)
+    return;
+  const auto sta = wifi::global_wifi_component->get_sta();
+  std::string ssid(sta.get_ssid().c_str(), sta.get_ssid().size());
+  std::string psk(sta.get_password().c_str(), sta.get_password().size());
+  if (ssid.empty() || ssid != connected_ssid())
+    return;  // not settled yet: the selected entry is not the network the radio is on
+  if (ssid == this->last_good_.ssid && psk == this->last_good_.psk)
+    return;
+  this->last_good_.ssid = ssid;
+  this->last_good_.psk = psk;
+  LastGoodRecord rec{};
+  rec.magic = LAST_GOOD_MAGIC;
+  std::strncpy(rec.ssid, ssid.c_str(), sizeof(rec.ssid) - 1);
+  std::strncpy(rec.psk, psk.c_str(), sizeof(rec.psk) - 1);
+  this->last_good_pref_.save(&rec);
+  ESP_LOGD(TAG, "Last router network: '%s'", ssid.c_str());
+}
+
+ap_portal_core::NetCred ApPortal::previous_network_() {
+  const auto sta = wifi::global_wifi_component->get_sta();
+  ap_portal_core::NetCred sel{std::string(sta.get_ssid().c_str(), sta.get_ssid().size()),
+                              std::string(sta.get_password().c_str(), sta.get_password().size())};
+  return ap_portal_core::fallback_network(sel, this->last_good_);
+}
+
 static constexpr uint32_t CHECK_MAGIC = 0xA9F0C0E1;
 struct RouterCheck {
   uint32_t magic;

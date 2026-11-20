@@ -640,6 +640,22 @@ static void test_reboot_timer_armed() {
   CHECK(u.update(false, 0, 120001, true));
 }
 
+static void test_fallback_network() {
+  NetCred last{"Guest", "guestpass1"};
+  // ESPHome has a network selected: that one
+  NetCred sel{"Keenetic", "homepass12"};
+  CHECK(fallback_network(sel, last).ssid == "Keenetic");
+  CHECK(fallback_network(sel, last).psk == "homepass12");
+  // router outage / scan: nothing selected -> the last network the device was on
+  NetCred none{};
+  CHECK(fallback_network(none, last).ssid == "Guest");
+  CHECK(fallback_network(none, last).psk == "guestpass1");
+  // a fresh device that never connected: nothing to fall back to
+  CHECK(fallback_network(none, NetCred{}).ssid.empty());
+  // an open network (empty password) is still a network
+  CHECK(fallback_network(none, NetCred{"Open", ""}).ssid == "Open");
+}
+
 int main() {
   test_reboot_timer_armed();
   test_dns_qname();
@@ -664,6 +680,7 @@ int main() {
   test_passes_unknown_mac();
   test_switch_hopeless();
   test_reboot_timer();
+  test_fallback_network();
   std::printf("%d checks, %d failed\n", g_checks, g_fail);
   return g_fail ? EXIT_FAILURE : EXIT_SUCCESS;
 }

@@ -634,6 +634,20 @@ inline const char *sta_error_kind(uint8_t reason) {
 // every router; anything else (a timeout, an association failure) may still pass and waits.
 // `streak` = how many disconnects in a row gave the same kind as `reason`.
 static constexpr uint8_t SWITCH_HOPELESS_FAILS = 3;
+// The network to fall back to when a switch from the page fails. ESPHome's selected network is
+// empty while it scans (a router outage, or a boot that has not connected yet), so it is not enough
+// on its own: then the last network the device was connected to is used (kept in memory and in
+// flash). Empty when there is none at all.
+struct NetCred {
+  std::string ssid;
+  std::string psk;
+};
+inline NetCred fallback_network(const NetCred &selected, const NetCred &last_good) {
+  if (!selected.ssid.empty())
+    return selected;
+  return last_good;
+}
+
 inline bool switch_hopeless(uint8_t streak, uint8_t reason) {
   if (streak < SWITCH_HOPELESS_FAILS)
     return false;
