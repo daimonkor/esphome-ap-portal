@@ -2,6 +2,17 @@
 
 Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monitor) run on the library.
 
+## 0.1.6 — 2026-11-20
+
+### Fixed
+- Router switch from the Wi-Fi popup or page during a router outage had nothing to fall back to: the
+  previous network was read from the network ESPHome has selected right now, which is empty while it
+  scans. A wrong password then left the device on the wrong network ("nothing to fall back to").
+  ap_portal now keeps the last router network the device was connected to (in memory and in flash,
+  written only when it changes) and falls back to it. Same for "Save, connect later". Checked on the
+  ESPHome 2026.11 / Arduino test board: router off, switch to another network with a wrong
+  password, back to the previous one after the timeout, reconnects when the router returns.
+
 ## 0.1.5 — 2026-11-20
 
 ### Added
