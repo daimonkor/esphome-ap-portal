@@ -385,12 +385,12 @@ constexpr size_t SSID_MAX = 32;
 // "MoveSensorBLE" + MAC 14:c1:9f:4f:d3:0c -> "MoveSensorBLE-4FD30C" (last 3 bytes, upper case).
 // The base is cut so the whole SSID fits in 32 bytes.
 inline std::string ssid_with_suffix(const std::string &base, const uint8_t mac[6]) {
-  static const char HEX[] = "0123456789ABCDEF";
+  static const char HEX_DIGITS[] = "0123456789ABCDEF";
   char suffix[8];
   suffix[0] = '-';
   for (int i = 0; i < 3; i++) {
-    suffix[1 + i * 2] = HEX[mac[3 + i] >> 4];
-    suffix[2 + i * 2] = HEX[mac[3 + i] & 0x0F];
+    suffix[1 + i * 2] = HEX_DIGITS[mac[3 + i] >> 4];
+    suffix[2 + i * 2] = HEX_DIGITS[mac[3 + i] & 0x0F];
   }
   suffix[7] = '\0';
   const size_t keep = SSID_MAX - 7;
