@@ -1,1 +1,1 @@
-{ "private": true, "scripts": { "test": "node popup_lock.test.js && node wifi_page_lock.test.js" }, "devDependencies": { "jsdom": "^24.0.0" } }
+{"private": true, "scripts": {"test": "node popup_lock.test.js && node wifi_page_lock.test.js && node clear_on_success.test.js"}, "devDependencies": {"jsdom": "^24.0.0"}}

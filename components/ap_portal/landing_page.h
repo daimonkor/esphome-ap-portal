@@ -142,7 +142,7 @@ function scan(){if(LK.s||LK.w||LK.r)return;rfb(true);apPortal.scan().then(load,f
 var tick=null;function busy(on){busy.on=on;LK.w=on;lock();
  clearInterval(tick);if(on)tick=setInterval(function(){var e=g('tc');if(e)e.textContent=Math.round((Date.now()-busy.t)/1000)+' s'},500)}
 function follow(p){busy.t=p.t;busy(true);toast('<b>'+t('going1')+' «'+esc(p.ssid)+'»… <span id="tc"></span></b><div class="m">'+t('going2')+'</div>'+addrs(p.addresses)+'<div class="m">'+t('phone')+'</div>',null,true);
- apPortal.watch(p.ssid,{host:p.host,since:p.t}).then(function(x){busy(false);return x},function(e){busy(false);throw e}).then(function(x){apPortal.pending.clear();g('pw').value='';
+ apPortal.watch(p.ssid,{host:p.host,since:p.t}).then(function(x){busy(false);return x},function(e){busy(false);throw e}).then(function(x){apPortal.pending.clear();g('pw').value='';g('ss').value='';
   if(x.onAp)toast('<b>'+t('found')+' «'+esc(p.ssid)+'»</b>'+addrs([{kind:'new',url:x.url}])+'<div class="m">'+t('stayap')+'</div>');
   else toast('<b>'+t('found')+' «'+esc(p.ssid)+'»: '+esc(x.ip)+'</b>',{url:x.url,label:t('open')})})
  .catch(function(e){apPortal.pending.clear();if(e.code)toast('<b class="er">'+t('err')+' «'+esc(p.ssid)+'»: '+esc(t(e.code))+(e.reason>0?' ('+(e.reason|0)+')':'')+'</b><div class="m">'+(e.previous?t('back')+' «'+esc(e.previous)+'».':t('stay'))+'</div>');else toast('<b>'+t('lost')+'</b>'+addrs(p.addresses))})}
@@ -273,7 +273,7 @@ $('#rf').onclick=function(){if(LK.s||LK.w||LK.r)return;rfb(true);apPortal.scan()
 var tick=null;function busy(on){busy.on=on;LK.w=on;lock();
  clearInterval(tick);if(on)tick=setInterval(function(){var e=$('#tc');if(e)e.textContent=Math.round((Date.now()-busy.t)/1000)+' s'},500)}
 function follow(p){busy.t=p.t;busy(true);toast('<b>'+X.g1+' «'+esc(p.ssid)+'»… <span id="tc"></span></b><div class="m">'+X.g2+'</div>'+addrs(p.addresses)+'<div class="m">'+X.ph+'</div>',null,true);
- apPortal.watch(p.ssid,{host:p.host,since:p.t}).then(function(x){busy(false);return x},function(e){busy(false);throw e}).then(function(x){apPortal.pending.clear();$('#pw').value='';
+ apPortal.watch(p.ssid,{host:p.host,since:p.t}).then(function(x){busy(false);return x},function(e){busy(false);throw e}).then(function(x){apPortal.pending.clear();$('#pw').value='';$('#ss').value='';
   if(x.onAp)toast('<b>'+X.found+' «'+esc(p.ssid)+'»</b>'+addrs([{kind:'new',url:x.url}])+'<div class="m">'+X.sap+'</div>');
   else toast('<b>'+X.found+' «'+esc(p.ssid)+'»: '+esc(x.ip)+'</b>',x.url)})
  .catch(function(e){apPortal.pending.clear();if(e.code)toast('<b class="er">'+X.err+' «'+esc(p.ssid)+'»: '+esc(X[e.code]||e.code)+(e.reason>0?' ('+(e.reason|0)+')':'')+'</b><div class="m">'+(e.previous?X.back+' «'+esc(e.previous)+'».':X.stay)+'</div>');else toast('<b>'+X.lost+'</b>'+addrs(p.addresses))})}
