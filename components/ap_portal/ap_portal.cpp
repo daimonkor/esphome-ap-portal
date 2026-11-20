@@ -735,7 +735,9 @@ void ApPortal::reboot_tick_(bool router, uint32_t now) {
     this->router_seen_ = true;
   // Only with a router network to go back to (YAML or saved from the page, non-empty), Wi-Fi switched
   // on, and that router reached once since boot (see router_seen_).
-  const bool has_net = w->has_sta() && !w->get_sta().get_ssid().empty();
+  // has_sta(), not get_sta(): get_sta() is the network ESPHome has selected right now, empty while it
+  // scans — that would read as "no router network" and reset the timer in the middle of an outage.
+  const bool has_net = w->has_sta();
   const bool armed = has_net && !w->is_disabled() && this->router_seen_;
   if (armed != this->reboot_armed_logged_) {
     this->reboot_armed_logged_ = armed;
