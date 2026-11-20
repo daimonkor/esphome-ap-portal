@@ -182,10 +182,10 @@ wifi:
 ```
 
 ESPHome then raises the access point and keeps it on router connections; ap_portal leaves it alone
-(no own raise, ESPHome's `ap_timeout` untouched) and adds everything else. ESPHome reboots after
-`reboot_timeout` without a router only while nobody is on the access point. `ap_mode: WISP` is
-rejected (ap_portal's DNS would take the clients' internet away); `keep_ap_on_connect`, ap_portal's
-`ap_raise: without_router` and its `reboot_timeout` are rejected next to it.
+(no own raise, ESPHome's `ap_timeout` untouched) and adds everything else. The "reboot without a
+router" is ap_portal's here too (see below): ESPHome's own one would reboot every `reboot_timeout`
+for the whole outage. `ap_mode: WISP` is rejected (ap_portal's DNS would take the clients' internet
+away); `keep_ap_on_connect` and ap_portal's `ap_raise: without_router` are rejected next to it.
 
 **ESPHome 2026.10 (or a fallback-only access point):**
 
@@ -208,9 +208,9 @@ ap_portal:
     off_when_idle: 60s       # router back and nobody on it this long: access point down
 ```
 
-Whenever ap_portal raises the access point itself (everything except `wifi: ap: ap_mode:
-always_on`), ESPHome's "reboot without a router" cannot see that access point, so ap_portal takes it
-over: after `reboot_timeout` (default: `wifi: reboot_timeout`, 15 min) without a router and with
+ESPHome's "reboot without a router" either cannot see an access point ap_portal raised, or (with
+`wifi: ap: ap_mode: always_on`) reboots again and again for the whole outage, so ap_portal takes it
+over in every mode: after `reboot_timeout` (default: `wifi: reboot_timeout`, 15 min) without a router and with
 **nobody** on the access point. A client stops the timer; it starts over when the last one leaves
 or the router comes back. The timer also waits while a router switch or its fallback runs, while an
 OTA upload runs and for a minute after an access point client's last page request. It only runs once

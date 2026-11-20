@@ -516,11 +516,6 @@ def _final_validate(config):
                 f"ap_portal ap_raise: without_router switches the access point off, wifi: ap: ap_mode: {wifi_ap_mode} keeps "
                 "it on; use one of them"
             )
-        if CONF_REBOOT_TIMEOUT in config:
-            raise cv.Invalid(
-                f"with wifi: ap: ap_mode: {wifi_ap_mode} ESPHome's own wifi: reboot_timeout applies (it waits while "
-                "someone is on the access point); remove ap_portal reboot_timeout"
-            )
     wp = config[CONF_WIFI_PAGE]
     if wp[CONF_ENABLED] and not config[CONF_API][CONF_ENABLED]:
         raise cv.Invalid("wifi_page needs api: enabled (the page talks to /ap_portal/)")

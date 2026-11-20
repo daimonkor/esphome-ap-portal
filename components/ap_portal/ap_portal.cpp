@@ -721,10 +721,11 @@ void ApPortal::dns_close_() {
 // ───────────────────────────── reboot without a router ─────────────────────────────
 // ESPHome's own reboot_timeout knows only the access point it started itself: with ours (raised by
 // ap_portal) it either never reboots (2026.10: "has an access point") or reboots with clients on it
-// (2026.11 counts only its own). So ap_portal takes it over — same timeout, paused while anyone is
-// on the access point — unless ESPHome keeps the access point itself (wifi: ap: ap_mode: always_on).
+// (2026.11 counts only its own). With wifi: ap: ap_mode: always_on it does wait for clients, but it
+// reboots every reboot_timeout for as long as the router is gone, even right after a boot that has
+// not seen it. So ap_portal takes it over in every mode — same timeout, paused while anyone is on the
+// access point, and only once the router was reached since boot (one reboot per long outage).
 void ApPortal::reboot_tick_(bool router, uint32_t now) {
-#ifndef USE_WIFI_AP_PERSISTENT
   if (!this->reboot_taken_) {
     wifi::global_wifi_component->set_reboot_timeout(0);
     this->reboot_taken_ = true;
@@ -767,7 +768,6 @@ void ApPortal::reboot_tick_(bool router, uint32_t now) {
     else
       ESP_LOGD(TAG, "Reboot timer stopped (%s)", router ? "router back" : "client on the access point");
   }
-#endif
 }
 
 // ───────────────────────────── quiet mode ─────────────────────────────

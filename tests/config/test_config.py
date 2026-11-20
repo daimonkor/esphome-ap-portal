@@ -301,13 +301,19 @@ def test_later_button_off_is_valid(tmp_path):
 
 
 @needs_2026_11
+def test_reboot_timeout_allowed_with_always_on(tmp_path):
+    # ap_portal manages "reboot without a router" with always_on too (ESPHome's one is switched off)
+    r, out = run(tmp_path, _always_on_head() + "ap_portal:\n  reboot_timeout: 5min\n")
+    assert r.returncode == 0, out[-2000:]
+
+
+@needs_2026_11
 @pytest.mark.parametrize(
     "opts,needle",
     [
         ("  keep_ap_on_connect: true\n", "keep_ap_on_connect is not needed"),
         ("  ap_raise: without_router\n", "use one of them"),
         ("  ap_mode: fallback\n", "use one of them"),
-        ("  reboot_timeout: 5min\n", "remove ap_portal reboot_timeout"),
     ],
 )
 def test_wifi_ap_always_on_conflicts(tmp_path, opts, needle):
