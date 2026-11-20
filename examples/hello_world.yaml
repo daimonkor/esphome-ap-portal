@@ -30,7 +30,7 @@ web_server:
 external_components:
   - source:
       type: local
-      path: ../components       # in your project: github://daimonkor/esphome-ap-portal@v0.1.0
+      path: ../components       # in your project: github://daimonkor/esphome-ap-portal@v0.2.0
     components: [ap_portal]
 
 ap_portal:

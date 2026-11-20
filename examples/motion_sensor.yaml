@@ -1,5 +1,7 @@
-# Battery motion sensor: the access point only in service mode (a switch), SSID with the MAC
-# suffix, a password the user can change from the device page.
+# Battery motion sensor (as on the real Move Sensor BLE): Wi-Fi and the access point only in
+# service mode (a switch), the access point next to the router while it is on, SSID with the MAC
+# suffix, a password the user can change from the device page. The factory password reset is the
+# sensor's own (its service switch), so power cycles are off.
 esphome:
   name: move-sensor-ble
   friendly_name: Move Sensor BLE
@@ -16,7 +18,10 @@ wifi:
   ssid: my-router
   password: router-password
   enable_on_boot: false         # Wi-Fi only in service mode
+  reboot_timeout: 0s            # a battery device: never reboot for a missing router
+  post_connect_roaming: false   # required by ap_mode: always_on
   ap:
+    ap_mode: always_on          # the access point stays up next to the router
     ssid: MoveSensorBLE
     password: sensor1234
     manual_ip:
@@ -45,6 +50,10 @@ ap_portal:
   active: !lambda return id(service_mode);
   ssid_suffix_mac: true         # MoveSensorBLE-4FD30C
   password_persist: true
+  password_reset:
+    power_cycles: 0             # the sensor resets the password itself (service switch)
+  api:
+    from_home: true             # the Wi-Fi popup also works from the home network
   landing:
     title: Move Sensor BLE
     accent_color: "#3d7bff"
