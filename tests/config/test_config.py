@@ -80,22 +80,13 @@ def test_examples_valid(example):
 GOOD = {
     "minimal": "ap_portal:\n",
     "lambda_active": "globals:\n  - {id: svc, type: bool}\nap_portal:\n  active: !lambda return id(svc);\n",
-    "page_mode": "ap_portal:\n  landing: {mode: page, title: X, accent_color: '#f59e0b'}\n",
+    "styled": "ap_portal:\n  landing: {title: X, accent_color: '#f59e0b'}\n",
+    "mode_redirect_explicit": "ap_portal:\n  landing: {mode: redirect}\n",
     "short_color": "ap_portal:\n  landing: {accent_color: '#fa0'}\n",
-    "gate_defaults": "ap_portal:\n  landing: {mode: gate}\n",
-    "gate_full": textwrap.dedent("""\
-        ap_portal:
-          landing:
-            mode: gate
-            html: "<html>x</html>"
-            enter_path: /dashboard
-            enter_window: 10min
-            pass_paths: [/history.bin, /events]
-        """),
+    "own_html": "ap_portal:\n  landing: {html: '<html>x</html>'}\n",
     "html_template_vars": textwrap.dedent("""\
         ap_portal:
           landing:
-            mode: page
             accent_color: '#ff0000'
             html: "<h1>{{title}}</h1>{{#if sta_ip}}{{sta_ip}}{{/if}}{{battery}} {{fw}}"
             vars:
@@ -104,14 +95,7 @@ GOOD = {
           on_landing:
             - logger.log: {format: "%s %s", args: [ip.c_str(), path.c_str()]}
         """),
-    "html_static_gz": "ap_portal:\n  landing: {mode: page, html: '<p>static page</p>'}\n",
-    "gate_enter_hook": textwrap.dedent("""\
-        ap_portal:
-          landing:
-            mode: gate
-          on_enter:
-            - logger.log: {format: "%s %s", args: [mac.c_str(), ip.c_str()]}
-        """),
+    "html_static_gz": "ap_portal:\n  landing: {html: '<p>static page</p>'}\n",
     "reset_defaults": "ap_portal:\n  password_persist: true\n",
     "reset_own_pin": textwrap.dedent("""\
         ap_portal:
@@ -170,13 +154,15 @@ BAD = {
     "ssid_suffix_too_long": (head(ap_ssid="A" * 26), "ap_portal:\n  ssid_suffix_mac: true\n", "longer than 32"),
     "var_builtin_name": (head(), "ap_portal:\n  landing: {vars: {ssid: x}}\n", "built-in variable"),
     "var_bad_name": (head(), "ap_portal:\n  landing: {vars: {Bad-Name: x}}\n", "variable name"),
-    # gate-only keys outside gate mode
-    "pass_paths_not_gate": (head(), "ap_portal:\n  landing: {pass_paths: [/x]}\n", "only work with mode: gate"),
-    "enter_path_not_gate": (head(), "ap_portal:\n  landing: {mode: page, enter_path: /e}\n", "only work with mode: gate"),
-    "enter_equals_path": (
+    # removed in 0.2.0: landing modes page and gate, the gate keys and on_enter
+    "mode_gate_removed": (head(), "ap_portal:\n  landing: {mode: gate}\n", "was removed in ap_portal 0.2.0"),
+    "mode_page_removed": (head(), "ap_portal:\n  landing: {mode: page}\n", "was removed in ap_portal 0.2.0"),
+    "pass_paths_removed": (head(), "ap_portal:\n  landing: {pass_paths: [/x]}\n", "were removed in ap_portal 0.2.0"),
+    "enter_path_removed": (head(), "ap_portal:\n  landing: {enter_path: /e}\n", "were removed in ap_portal 0.2.0"),
+    "on_enter_removed": (
         head(),
-        "ap_portal:\n  landing: {mode: gate, path: /w, enter_path: /w}\n",
-        "must differ",
+        "ap_portal:\n  on_enter:\n    - logger.log: x\n",
+        "on_enter was removed",
     ),
     "path_without_slash": (head(), "ap_portal:\n  landing: {path: welcome}\n", "must start with '/'"),
     "bad_color": (head(), "ap_portal:\n  landing: {accent_color: blue}\n", "is not a color"),
@@ -186,11 +172,6 @@ BAD = {
         "ap_portal:\n  id: p\nbutton:\n  - platform: template\n    name: a\n    on_press:\n"
         "      - ap_portal.set_password: {id: p, password: short}\n",
         "8..63",
-    ),
-    "window_too_short": (
-        head(),
-        "ap_portal:\n  landing: {mode: gate, enter_window: 10s}\n",
-        "enter_window",
     ),
     "one_power_cycle": (head(), "ap_portal:\n  password_reset: {power_cycles: 1}\n", "0 (off) or 2..9"),
     "cycles_vs_safe_mode": (
@@ -232,7 +213,7 @@ esp32:
 """
 
 
-@pytest.mark.parametrize("name", ["minimal", "gate_full", "page_mode"])
+@pytest.mark.parametrize("name", ["minimal", "own_html", "styled"])
 def test_good_arduino(tmp_path, name):
     r, out = run(tmp_path, head(esp=ESP_ARDUINO) + GOOD[name])
     assert r.returncode == 0, out[-2000:]
@@ -341,7 +322,6 @@ def test_boot_pin_used_by_i2c_warns(tmp_path):
         ("  landing:\n    path: /\n", "is the device's own page"),
         ("  wifi_page:\n    path: /\n", "is the device's own page"),
         ("  landing:\n    path: /ap_portal/x\n", "reserved"),
-        ("  landing:\n    mode: gate\n    pass_paths: [/]\n", "switch the gate off"),
         ("  wifi_page:\n    ui_button: true\n", "add web_server"),
     ],
 )

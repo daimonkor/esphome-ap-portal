@@ -1,7 +1,7 @@
 """ap_portal — the device's own Wi-Fi access point next to the router connection.
 
-DNS hijack for the phone's "Sign in to network" window, an own landing page (redirect / page /
-gate), and a quiet mode that keeps phones on the access point when there is no router.
+DNS hijack for the phone's "Sign in to network" window, an own landing page (the phone's
+connectivity check is redirected to it), and a quiet mode that keeps phones on the access point when there is no router.
 https://github.com/daimonkor/esphome-ap-portal
 """
 
@@ -103,7 +103,8 @@ BUILTIN_VARS = (
     "secondary_label", "secondary_href", "secondary_default",
     "wifi_path", "ap_password_block", "custom_password",
 )
-GATE_KEYS = (CONF_ENTER_PATH, CONF_ENTER_WINDOW, CONF_PASS_PATHS)
+# Removed in 0.2.0 with landing modes page and gate (only the redirect is left).
+REMOVED_GATE_KEYS = (CONF_ENTER_PATH, CONF_ENTER_WINDOW, CONF_PASS_PATHS)
 
 ap_portal_ns = cg.esphome_ns.namespace("ap_portal")
 ApPortal = ap_portal_ns.class_("ApPortal", cg.Component)
@@ -119,9 +120,6 @@ PortalStopTrigger = ap_portal_ns.class_("PortalStopTrigger", automation.Trigger.
 LandingTrigger = ap_portal_ns.class_(
     "LandingTrigger", automation.Trigger.template(cg.std_string, cg.std_string)
 )
-EnterTrigger = ap_portal_ns.class_(
-    "EnterTrigger", automation.Trigger.template(cg.std_string, cg.std_string)
-)
 PowerCycleTrigger = ap_portal_ns.class_("PowerCycleTrigger", automation.Trigger.template(cg.int_))
 RouterFallbackTrigger = ap_portal_ns.class_(
     "RouterFallbackTrigger", automation.Trigger.template(cg.std_string, cg.std_string)
@@ -132,8 +130,6 @@ PasswordResetTrigger = ap_portal_ns.class_(
 ScanAction = ap_portal_ns.class_("ScanAction", automation.Action)
 SetPasswordAction = ap_portal_ns.class_("SetPasswordAction", automation.Action)
 ResetPasswordAction = ap_portal_ns.class_("ResetPasswordAction", automation.Action)
-
-MODES = {"redirect": 0, "page": 1, "gate": 2}
 
 
 def _url_path(value):
@@ -152,13 +148,6 @@ def _own_path(value):
         raise cv.Invalid("'/' is the device's own page; use a path of its own, like /welcome")
     if value.startswith("/ap_portal/"):
         raise cv.Invalid("/ap_portal/ is reserved for ap_portal's endpoints")
-    return value
-
-
-def _pass_path(value):
-    value = _url_path(value)
-    if value == "/":
-        raise cv.Invalid("pass_paths: '/' would let every page through and switch the gate off")
     return value
 
 
@@ -254,7 +243,8 @@ TEXT_OR_FILE = cv.Any(
 
 LANDING_SCHEMA = cv.Schema(
     {
-        cv.Optional(CONF_MODE, default="redirect"): cv.one_of(*MODES, lower=True),
+        # Only "redirect" is left (0.2.0): page and gate were removed. Still read, to say so.
+        cv.Optional(CONF_MODE, default="redirect"): cv.one_of("redirect", "page", "gate", lower=True),
         cv.Optional(CONF_PATH, default="/welcome"): _own_path,
         cv.Optional(CONF_HTML): TEXT_OR_FILE,
         cv.Optional(CONF_TITLE): cv.string_strict,
@@ -267,12 +257,9 @@ LANDING_SCHEMA = cv.Schema(
                 cv.Required(CONF_HREF): cv.string_strict,
             }
         ),
-        cv.Optional(CONF_ENTER_PATH): _own_path,
-        cv.Optional(CONF_ENTER_WINDOW): cv.All(
-            cv.positive_time_period_milliseconds,
-            cv.Range(min=cv.TimePeriod(minutes=1), max=cv.TimePeriod(hours=24)),
-        ),
-        cv.Optional(CONF_PASS_PATHS): cv.ensure_list(_pass_path),
+        cv.Optional(CONF_ENTER_PATH): cv.valid,
+        cv.Optional(CONF_ENTER_WINDOW): cv.valid,
+        cv.Optional(CONF_PASS_PATHS): cv.valid,
         # Own template variables: a string, or a lambda returning std::string (read in loop()
         # once a second, the page gets the latest value).
         cv.Optional(CONF_VARS, default={}): cv.Schema(
@@ -285,19 +272,17 @@ LANDING_SCHEMA = cv.Schema(
 def _validate_landing(config):
     for name in config[CONF_VARS]:
         _var_name(name)
-    if config[CONF_MODE] != "gate":
-        extra = [k for k in GATE_KEYS if k in config]
-        if extra:
-            raise cv.Invalid(
-                f"{', '.join(repr(k) for k in extra)} only work with mode: gate "
-                f"(mode is '{config[CONF_MODE]}')."
-            )
-    else:
-        config.setdefault(CONF_ENTER_PATH, "/enter")
-        config.setdefault(CONF_ENTER_WINDOW, cv.positive_time_period_milliseconds("30min"))
-        config.setdefault(CONF_PASS_PATHS, [])
-        if config[CONF_ENTER_PATH] == config[CONF_PATH]:
-            raise cv.Invalid("'enter_path' and 'path' must differ")
+    if config[CONF_MODE] != "redirect":
+        raise cv.Invalid(
+            f"landing: mode: {config[CONF_MODE]} was removed in ap_portal 0.2.0 — only redirect is left "
+            "(the phone's connectivity check gets a 302 to the landing page, the device's pages open "
+            "directly). Remove 'mode' or set it to redirect."
+        )
+    extra = [k for k in REMOVED_GATE_KEYS if k in config]
+    if extra:
+        raise cv.Invalid(
+            f"{', '.join(repr(k) for k in extra)} were removed in ap_portal 0.2.0 with mode: gate; remove them."
+        )
     return config
 
 
@@ -407,9 +392,8 @@ CONFIG_SCHEMA = cv.All(
             cv.Optional(CONF_ON_LANDING): automation.validate_automation(
                 {cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(LandingTrigger)}
             ),
-            cv.Optional(CONF_ON_ENTER): automation.validate_automation(
-                {cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(EnterTrigger)}
-            ),
+            # removed in 0.2.0 with mode: gate
+            cv.Optional(CONF_ON_ENTER): cv.invalid("on_enter was removed in ap_portal 0.2.0 with landing mode gate"),
         }
     ).extend(cv.COMPONENT_SCHEMA),
     _ap_raise,
@@ -521,7 +505,7 @@ def _final_validate(config):
         raise cv.Invalid("wifi_page needs api: enabled (the page talks to /ap_portal/)")
     if wp[CONF_ENABLED]:
         land = config[CONF_LANDING]
-        if wp[CONF_PATH] in (land[CONF_PATH], land.get(CONF_ENTER_PATH)):
+        if wp[CONF_PATH] == land[CONF_PATH]:
             raise cv.Invalid(f"wifi_page path '{wp[CONF_PATH]}' clashes with the landing paths")
         if wp[CONF_PATH].startswith("/ap_portal/"):
             raise cv.Invalid("wifi_page path: /ap_portal/ is reserved for its endpoints")
@@ -614,7 +598,6 @@ async def to_code(config):
     cg.add(var.set_dns_enabled(config[CONF_DNS][CONF_ENABLED]))
 
     landing = config[CONF_LANDING]
-    cg.add(var.set_mode(MODES[landing[CONF_MODE]]))
     cg.add(var.set_landing_path(landing[CONF_PATH]))
     if CONF_HTML in landing:
         html = _read(landing[CONF_HTML])
@@ -695,11 +678,6 @@ async def to_code(config):
             cg.add(var.add_lambda_var(name, lam))
         else:
             cg.add(var.add_static_var(name, value))
-    if landing[CONF_MODE] == "gate":
-        cg.add(var.set_enter_path(landing[CONF_ENTER_PATH]))
-        cg.add(var.set_enter_window(landing[CONF_ENTER_WINDOW].total_milliseconds))
-        for p in landing[CONF_PASS_PATHS]:
-            cg.add(var.add_pass_path(p))
 
     for conf in config.get(CONF_ON_CLIENT_CONNECTED, []):
         trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var)
@@ -710,9 +688,6 @@ async def to_code(config):
     for conf in config.get(CONF_ON_LANDING, []):
         trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var)
         await automation.build_automation(trigger, [(cg.std_string, "ip"), (cg.std_string, "path")], conf)
-    for conf in config.get(CONF_ON_ENTER, []):
-        trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var)
-        await automation.build_automation(trigger, [(cg.std_string, "mac"), (cg.std_string, "ip")], conf)
     for key in (CONF_ON_AP_RESTORED, CONF_ON_PORTAL_START, CONF_ON_PORTAL_STOP):
         for conf in config.get(key, []):
             trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var)

@@ -1,6 +1,7 @@
 # Deye battery monitor: always on, must work during power outages (router down).
-# Gate mode: a phone on the access point first sees the landing page; the button opens
-# the panel for that phone. The home network gets the panel directly.
+# ESPHome keeps the access point next to the router (always_on); the phone's sign-in window shows
+# the landing page with a button to the panel, http://100.64.4.1/ opens the panel directly.
+# The Wi-Fi popup (networks, router switch, access point password) works from the panel too.
 esphome:
   name: deye-battery
   friendly_name: Deye Battery
@@ -8,14 +9,17 @@ esphome:
 esp32:
   board: esp32-c3-devkitm-1
   framework:
-    type: esp-idf
+    type: arduino               # works on esp-idf too
 
 logger:
 
 wifi:
   ssid: my-router
   password: router-password
+  reboot_timeout: 0s            # never reboot for a missing router (it may be off for hours)
+  post_connect_roaming: false   # required by ap_mode: always_on
   ap:
+    ap_mode: always_on
     ssid: Deye-Battery
     password: deyebattery1
     manual_ip:
@@ -26,7 +30,9 @@ wifi:
 web_server:
   port: 80
   version: 3
-  local: true
+
+api:
+  reboot_timeout: 0s
 
 external_components:
   - source:
@@ -36,9 +42,13 @@ external_components:
 
 ap_portal:
   id: portal
+  password_persist: true
+  password_reset:
+    power_cycles: 0             # always powered: a flickering mains supply must not reset the password
+  api:
+    from_home: true             # the Wi-Fi popup from the home network too
   landing:
-    mode: gate
+    title: Deye Battery Monitor
+    accent_color: "#03a9f4"
     html:
       file: pages/deye_landing.html
-    enter_path: /dashboard
-    pass_paths: [/history.bin]

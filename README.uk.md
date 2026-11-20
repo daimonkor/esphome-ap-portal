@@ -13,8 +13,8 @@ ESP32 тримає **власну точку доступу Wi-Fi одночас
 Чого не вміє штатний `captive_portal` ESPHome, а вміє `ap_portal`:
 
 - точка доступу лишається увімкненою після підключення до роутера;
-- власна стартова сторінка: перенаправлення, сторінка або **«вхідні двері»** (gate: панель
-  відкривається лише після натискання кнопки);
+- власна стартова сторінка: перевірка зв’язку телефона перенаправляється на неї, власні сторінки
+  пристрою відкриваються напряму;
 - запити з домашньої мережі не чіпаються — стартову сторінку бачать лише клієнти точки доступу;
 - **щадний режим**: без роутера ESPHome сканує всі канали й перезапускає адаптер, телефони на
   точці втрачають пакети або відпадають (вимір: 45 % втрат). `ap_portal` тримає радіо на каналі
@@ -44,7 +44,7 @@ web_server:
   local: true                   # сторінка працює без інтернету
 
 external_components:
-  - source: github://daimonkor/esphome-ap-portal@v0.1.6
+  - source: github://daimonkor/esphome-ap-portal@v0.2.0
     components: [ap_portal]
 
 ap_portal:
@@ -64,7 +64,7 @@ ap_portal:
   dns:
     enabled: true
   landing:
-    mode: redirect              # redirect (302) / page (200) / gate
+    mode: redirect              # єдиний режим з 0.2.0 (page і gate видалено)
     path: /welcome
     # змінні вбудованої сторінки (доступні й у власному html):
     title: My Device            # за замовчуванням friendly_name
@@ -77,10 +77,6 @@ ap_portal:
     # vars:                     # власні змінні шаблону
     #   battery: !lambda return to_string((int) id(soc).state);
     #   fw: "1.2.3"
-    # лише для gate:
-    # enter_path: /enter        # кнопка: видає прохід цьому клієнту і робить 302 на /
-    # enter_window: 30min       # прохід спливає після стількох хвилин без запитів
-    # pass_paths: [/history.bin]  # ніколи не перехоплюються
   api:                          # адреси /ap_portal/ і client.js для власного сайту
     enabled: true
     from_home: false            # і з домашньої мережі (під логіном web_server)
@@ -90,7 +86,7 @@ ap_portal:
     firmware: true              # потім до мережі з YAML (wifi: ssid / networks)
     # firmware: {ssid: Backup-Net, password: !secret backup}   # або власна запасна мережа
   on_router_fallback:           # to: "previous" / "firmware" / "none", ssid
-  wifi_page:                    # вбудована сторінка /wifi, лише для клієнтів точки (у gate — теж без кнопки)
+  wifi_page:                    # вбудована сторінка /wifi, лише для клієнтів точки
     enabled: true               # список мереж, підключення до роутера, пароль точки доступу
     path: /wifi                 # сюди веде друга кнопка стартової сторінки, якщо не задано `secondary`
     ap_password: true           # блок пароля точки доступу
@@ -106,7 +102,6 @@ ap_portal:
   on_portal_start:
   on_portal_stop:
   on_landing:                   # ip, path — показано стартову сторінку
-  on_enter:                     # mac, ip — gate: клієнт натиснув кнопку
   on_power_cycle:               # count — швидкий запуск у серії (блимнути світлодіодом)
   on_password_reset:            # source: "power_cycles" або "button"
 ```
@@ -124,8 +119,8 @@ ap_portal:
 
 `/wifi` показує мережі навколо (фоновий пошук, поки роутер підключений), підключає пристрій до
 мережі роутера (зберігає ESPHome, переживає перезавантаження) і змінює пароль точки доступу. Її
-бачать лише клієнти точки доступу — ніколи домашня мережа; у режимі gate — і до кнопки (захист —
-пароль точки). Кнопка Wi-Fi на стартовій сторінці відкриває її попапом на місці.
+бачать лише клієнти точки доступу — ніколи домашня мережа; захист —
+пароль точки. Кнопка Wi-Fi на стартовій сторінці відкриває її попапом на місці.
 Її адреси — під `/ap_portal/`. Якщо у пристрою власна сторінка налаштувань Wi-Fi, вимкніть:
 `wifi_page: {enabled: false}`.
 
@@ -227,7 +222,7 @@ ap_mode: always_on`) перезавантажує знову і знову ве�
 | `{{#unless name}}…{{/unless}}` | навпаки |
 
 Вбудовані змінні: `title`, `ap_ip`, `sta_ip` (порожньо без роутера), `host` (для
-`http://{{host}}.local/`), `ssid`, `enter` (`enter_path` у режимі gate, інакше `/`), `landing`,
+`http://{{host}}.local/`), `ssid`, `enter` (`/`, сторінка пристрою), `landing`,
 `mode`, `clients`, а також ключі оформлення вище (`accent_color`, `accent_text`, `icon_svg`,
 `primary_label`, `secondary_label`, `secondary_href`). Лямбди з `vars:` виконуються в головному
 циклі раз на секунду, ніколи в задачі веб-сервера. Сторінка без `{{` віддається стиснутою gzip
@@ -253,7 +248,7 @@ ap_mode: always_on`) перезавантажує знову і знову ве�
 | `password_reset: power_cycles` не менше за `safe_mode: num_attempts` | помилка |
 | Пін BOOT для `password_reset` зайнятий іншим компонентом | попередження, утримання BOOT вимкнено |
 | Ім'я у `vars:` не виду `[a-z_][a-z0-9_]*` або збігається з вбудованою змінною | помилка |
-| `enter_path`, `enter_window`, `pass_paths` без `mode: gate` | помилка |
+| `mode: page` / `mode: gate`, `enter_path`, `enter_window`, `pass_paths`, `on_enter` (видалено в 0.2.0) | помилка |
 | ESPHome не 2026.11.x | попередження |
 
 ## Приклади
@@ -261,7 +256,7 @@ ap_mode: always_on`) перезавантажує знову і знову ве�
 - [`examples/hello_world.yaml`](examples/hello_world.yaml) — мінімальна конфігурація
 - [`examples/motion_sensor.yaml`](examples/motion_sensor.yaml) — точка доступу лише в сервісному режимі, пароль зі сторінки
 - [`examples/hivescale.yaml`](examples/hivescale.yaml) — ваги для вулика на пасіці, роутера зазвичай немає
-- [`examples/deye.yaml`](examples/deye.yaml) — монітор батареї, режим gate, має працювати під час відключення світла
+- [`examples/deye.yaml`](examples/deye.yaml) — монітор батареї, Arduino, має працювати під час відключення світла
 
 ## Розробка
 

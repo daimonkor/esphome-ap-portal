@@ -37,18 +37,6 @@ static constexpr uint32_t QUIET_END_ROUTER_MS = 3000;   // router back and stabl
 static constexpr uint8_t MAX_CLIENTS = 4;
 static constexpr uint8_t DHCP_FIRST = 100, DHCP_LAST = 110;
 
-static const char *mode_name(ap_portal_core::Mode m) {
-  switch (m) {
-    case ap_portal_core::Mode::REDIRECT:
-      return "redirect";
-    case ap_portal_core::Mode::PAGE:
-      return "page";
-    case ap_portal_core::Mode::GATE:
-      return "gate";
-  }
-  return "?";
-}
-
 static std::string mac_str(const uint8_t *m) {
   char b[18];
   snprintf(b, sizeof(b), "%02X:%02X:%02X:%02X:%02X:%02X", m[0], m[1], m[2], m[3], m[4], m[5]);
@@ -343,14 +331,10 @@ void ApPortal::dump_config() {
                 "  SSID: %s%s\n"
                 "  Password persist: %s\n"
                 "  DNS: %s\n"
-                "  Landing mode: %s, path %s",
+                "  Landing: %s",
                 this->active_lambda_ ? "lambda" : YESNO(this->active_), this->ssid().c_str(),
                 this->ssid_suffix_mac_ ? " (MAC suffix)" : "", YESNO(this->password_persist_),
-                YESNO(this->dns_enabled_), mode_name(this->route_.mode), this->route_.landing_path.c_str());
-  if (this->route_.mode == ap_portal_core::Mode::GATE) {
-    ESP_LOGCONFIG(TAG, "  Enter path: %s, window %u min, pass paths: %u", this->route_.enter_path.c_str(),
-                  (unsigned) (this->passes_.window() / 60000), (unsigned) this->route_.pass_paths.size());
-  }
+                YESNO(this->dns_enabled_), this->route_.landing_path.c_str());
   if (captive_portal::global_captive_portal == nullptr)
     ESP_LOGW(TAG, "  captive_portal missing: no quiet mode without a router");
 }
@@ -365,8 +349,6 @@ void ApPortal::on_shutdown() {
   }
   this->dns_close_();
   this->lock_release_();
-  std::lock_guard<std::mutex> g(this->mu_);
-  this->passes_.clear();
 }
 
 // ───────────────────────────── events ─────────────────────────────
@@ -439,7 +421,7 @@ void ApPortal::register_events_() {
     esp_err_t e2 = esp_event_handler_instance_register(IP_EVENT, IP_EVENT_AP_STAIPASSIGNED, &ApPortal::on_ip_event_,
                                                         this, nullptr);
     if (e2 != ESP_OK)
-      ESP_LOGW(TAG, "IP event handler: %s (gate passes by IP only)", esp_err_to_name(e2));
+      ESP_LOGW(TAG, "IP event handler: %s (client addresses not logged)", esp_err_to_name(e2));
   } else if (e != ESP_ERR_INVALID_STATE) {  // invalid state = event loop not there yet, retry next loop
     ESP_LOGE(TAG, "Wi-Fi event handler: %s", esp_err_to_name(e));
     this->events_registered_ = true;  // do not spam; client triggers stay silent
@@ -457,21 +439,9 @@ void ApPortal::drain_events_() {
       this->on_client_connected_.call(mac_str(ev.mac));
     } else if (ev.type == EV_LEAVE) {
       ESP_LOGD(TAG, "Client %s left", mac_str(ev.mac).c_str());
-      ap_portal_core::Mac m;
-      std::memcpy(m.b, ev.mac, 6);
-      {
-        std::lock_guard<std::mutex> g(this->mu_);
-        this->passes_.revoke(m);
-        this->passes_.revoke_unknown();  // passes granted by IP alone: that address may be someone else's next
-        this->clients_.remove(m);
-      }
       this->on_client_disconnected_.call(mac_str(ev.mac));
     } else if (ev.type == EV_IP) {
-      ap_portal_core::Mac m;
-      std::memcpy(m.b, ev.mac, 6);
       ESP_LOGD(TAG, "Client %s got %s", mac_str(ev.mac).c_str(), ip_str(ev.ip).c_str());
-      std::lock_guard<std::mutex> g(this->mu_);
-      this->clients_.set(ev.ip, m);
     } else if (ev.type == EV_SCAN_DONE) {
       if (this->scanning_)
         ESP_LOGD(TAG, "scan: done");
@@ -482,9 +452,6 @@ void ApPortal::drain_events_() {
       }
     } else if (ev.type == EV_LANDING) {
       this->on_landing_.call(ip_str(ev.ip), std::string(ev.path));
-    } else if (ev.type == EV_ENTER) {
-      ESP_LOGD(TAG, "Gate: pass for %s (%s)", mac_str(ev.mac).c_str(), ip_str(ev.ip).c_str());
-      this->on_enter_.call(mac_str(ev.mac), ip_str(ev.ip));
     } else if (ev.type == EV_AP_STOP) {
       if (this->running_) {
         this->ap_stopped_by_esphome_ = true;
@@ -575,14 +542,9 @@ void ApPortal::stop_ap_() {
     cp->end();
   this->quiet_ours_ = false;
   this->lock_release_();
-  {
-    std::lock_guard<std::mutex> g(this->mu_);
-    this->passes_.clear();
-    this->clients_.clear();
-  }
 #ifndef USE_WIFI_AP_PERSISTENT
   // With wifi: ap: ap_mode: always_on the access point is ESPHome's: `active` off ends our portal
-  // (landing, DNS, gate), the access point itself stays.
+  // (landing, DNS), the access point itself stays.
   wifi_mode_t m;
   if (esp_wifi_get_mode(&m) == ESP_OK && m == WIFI_MODE_APSTA)
     esp_wifi_set_mode(WIFI_MODE_STA);
@@ -640,26 +602,6 @@ uint32_t ApPortal::ap_ip_be_(uint32_t *mask) const {
   if (mask != nullptr)
     *mask = info.netmask.addr;
   return info.ip.addr;
-}
-
-// The DHCP server's lease for this address, for a client whose IP event never reached us.
-static bool mac_from_dhcp(uint32_t ip, ap_portal_core::Mac &out) {
-  esp_netif_t *apn = ap_netif();
-  wifi_sta_list_t list{};
-  if (apn == nullptr || esp_wifi_ap_get_sta_list(&list) != ESP_OK || list.num <= 0)
-    return false;
-  esp_netif_pair_mac_ip_t pairs[ESP_WIFI_MAX_CONN_NUM]{};
-  const int n = std::min<int>(list.num, ESP_WIFI_MAX_CONN_NUM);
-  for (int i = 0; i < n; i++)
-    std::memcpy(pairs[i].mac, list.sta[i].mac, 6);
-  if (esp_netif_dhcps_get_clients_by_mac(apn, n, pairs) != ESP_OK)
-    return false;
-  for (int i = 0; i < n; i++)
-    if (pairs[i].ip.addr == ip) {
-      std::memcpy(out.b, pairs[i].mac, 6);
-      return true;
-    }
-  return false;
 }
 
 // ───────────────────────────── dns ─────────────────────────────
@@ -1497,10 +1439,6 @@ ApPortal::Classified ApPortal::classify_(AsyncWebServerRequest *request) {
   if (c.from_ap)
     this->last_ap_http_ms_ = millis();
 
-  if (r.from_ap && this->route_.mode == ap_portal_core::Mode::GATE) {
-    std::lock_guard<std::mutex> g(this->mu_);
-    r.has_pass = this->passes_.check(c.client_ip, millis());
-  }
   c.route = ap_portal_core::route(r, this->route_);
   auto *cp = captive_portal::global_captive_portal;
   c.claim = ap_portal_core::claim(c.route, r.get, cp != nullptr && cp->is_active());
@@ -1548,22 +1486,6 @@ void ApPortal::handleRequest(AsyncWebServerRequest *request) {
     case ap_portal_core::Route::REDIRECT:
       this->send_redirect_(request, "http://" + ip_str(this->ap_ip_be_()) + this->route_.landing_path);
       return;
-    case ap_portal_core::Route::ENTER: {
-      Event ev{};
-      ev.type = EV_ENTER;
-      ev.ip = c.client_ip;
-      {
-        std::lock_guard<std::mutex> g(this->mu_);
-        ap_portal_core::Mac m;
-        if (!this->clients_.find(c.client_ip, m))
-          mac_from_dhcp(c.client_ip, m);  // the IP event was missed; still unknown = static IP, by IP alone
-        this->passes_.grant(m, c.client_ip, millis());
-        std::memcpy(ev.mac, m.b, 6);
-      }
-      this->post_(ev);
-      this->send_redirect_(request, "/");
-      return;
-    }
     case ap_portal_core::Route::WRAP: {
       std::string body = ap_portal_core::render(WRAP_PAGE, this->page_vars_(c));
       auto *r = request->beginResponse(200, "text/html", reinterpret_cast<const uint8_t *>(body.data()), body.size());
@@ -1952,15 +1874,14 @@ ap_portal_core::Vars ApPortal::page_vars_(const Classified &c) {
   esp_netif_ip_info_t si{};
   if (sn != nullptr && esp_netif_get_ip_info(sn, &si) == ESP_OK && si.ip.addr != 0)
     sta = ip_str(si.ip.addr);
-  const bool gate = this->route_.mode == ap_portal_core::Mode::GATE;
   v.emplace_back("title", this->title_);
   v.emplace_back("ap_ip", ip_str(this->ap_ip_be_()));
   v.emplace_back("sta_ip", sta);
   v.emplace_back("host", this->host_);
   v.emplace_back("ssid", this->ssid_snap_);
-  v.emplace_back("enter", gate ? this->route_.enter_path : std::string("/"));
+  v.emplace_back("enter", "/");  // the device's page (kept for templates written for 0.1.x)
   v.emplace_back("landing", this->route_.landing_path);
-  v.emplace_back("mode", mode_name(this->route_.mode));
+  v.emplace_back("mode", "redirect");
   v.emplace_back("clients", to_string(this->client_count()));
   v.emplace_back("wifi_path", this->route_.wifi_path);
   v.emplace_back("ap_password_block", this->wifi_ap_password_ ? "1" : "");

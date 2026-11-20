@@ -4,8 +4,7 @@
 // real requests, packets and times.
 //
 //  * timers       — millis() arithmetic that survives the 49-day wrap
-//  * routing      — which HTTP GET the portal answers and how (redirect / page / gate)
-//  * passes       — the per-client "pass" of gate mode (MAC + IP, sliding window)
+//  * routing      — which HTTP GET the portal answers and how (a redirect to the landing page)
 //  * dns          — the answer to a DNS query: every A record points at the access point
 //  * quiet mode   — when ESPHome must stop scanning (client on the AP, no router) and
 //                   when the radio may be locked to the AP channel
@@ -29,13 +28,10 @@ inline bool elapsed(uint32_t now, uint32_t since, uint32_t ms) { return (uint32_
 inline bool reached(uint32_t now, uint32_t until) { return (int32_t) (now - until) >= 0; }
 
 // ───────────────────────────── routing ─────────────────────────────
-enum class Mode : uint8_t { REDIRECT, PAGE, GATE };
-
 enum class Route : uint8_t {
   PASS,      // not ours: web_server / the device's own pages answer
   LANDING,   // answer with the landing page (200)
   REDIRECT,  // 302 to the landing page
-  ENTER,     // gate: grant this client a pass, then 302 to "/"
   WIFI,      // the built-in Wi-Fi page (router network, access point password)
   API,       // /ap_portal/... — JSON and form endpoints of the Wi-Fi page
   WRAP,      // "/" for an access point client: ESPHome's page in a frame + the Wi-Fi button
@@ -51,15 +47,11 @@ struct Request {
   bool from_ap{false};   // the request arrived on the access point interface
   std::string host;      // Host header, may be empty
   std::string path;      // path without the query string
-  bool has_pass{false};  // gate: this client already holds a valid pass
   bool raw{false};       // "/?esp": the wrapped page itself
 };
 
 struct RouteConfig {
-  Mode mode{Mode::REDIRECT};
   std::string landing_path{"/welcome"};
-  std::string enter_path{"/enter"};
-  std::vector<std::string> pass_paths;  // gate: prefixes that are never intercepted
   std::string wifi_path;                // the built-in Wi-Fi page; empty = off
   bool api{true};                       // /ap_portal/ endpoints for access point clients
   bool wrap_root{false};                // ESPHome's own page gets the Wi-Fi button (ui_button)
@@ -123,135 +115,20 @@ inline Route route(const Request &r, const RouteConfig &c) {
 inline Route route_inner(const Request &r, const RouteConfig &c) {
   if (!r.from_ap)
     return Route::PASS;  // the home network never sees the portal, the Wi-Fi page included
-  // The Wi-Fi page and its endpoints (GET and POST): access point clients only. In gate mode too,
-  // without a pass: anyone on the access point can press Enter anyway — the access point password
-  // is the protection, and the landing page opens the Wi-Fi popup before Enter.
+  // The Wi-Fi page and its endpoints (GET and POST): access point clients only (the access point
+  // password is the protection).
   const bool page = !c.wifi_path.empty() && r.path == c.wifi_path;
   const bool api = c.api && has_prefix(r.path, API_PREFIX);
   if (page || api)
     return page ? (r.get ? Route::WIFI : Route::PASS) : Route::API;
   if (!r.get)
     return Route::PASS;
-  if (c.mode == Mode::GATE) {
-    if (r.path == c.enter_path)
-      return Route::ENTER;
-    for (const auto &p : c.pass_paths)
-      if (has_prefix(r.path, p))
-        return Route::PASS;
-    if (r.has_pass)
-      return Route::PASS;
-    return Route::LANDING;  // every GET, "/" included, until the client presses the button
-  }
   if (r.path == c.landing_path)
     return Route::LANDING;
   if (is_probe_path(r.path) || is_foreign_host(r.host))
-    return c.mode == Mode::REDIRECT ? Route::REDIRECT : Route::LANDING;
+    return Route::REDIRECT;
   return Route::PASS;
 }
-
-// ───────────────────────────── passes (gate) ─────────────────────────────
-// A pass belongs to one client (MAC + IP), slides with every request and expires after `window`
-// without requests. It is dropped when the client leaves the access point, so a new client that
-// gets the same IP from DHCP does not inherit it.
-struct Mac {
-  uint8_t b[6]{};
-  bool operator==(const Mac &o) const { return std::memcmp(b, o.b, 6) == 0; }
-  bool zero() const {
-    for (uint8_t x : b)
-      if (x)
-        return false;
-    return true;
-  }
-};
-
-class PassTable {
- public:
-  static constexpr size_t CAPACITY = 8;
-
-  explicit PassTable(uint32_t window_ms = 30u * 60u * 1000u) : window_(window_ms) {}
-  void set_window(uint32_t ms) { this->window_ = ms; }
-  uint32_t window() const { return this->window_; }
-
-  // Grant (or refresh) the pass of this client. A full table drops the pass used longest ago.
-  void grant(const Mac &mac, uint32_t ip, uint32_t now) {
-    Slot *slot = nullptr;
-    for (auto &s : this->slots_)
-      if (s.used && ((!mac.zero() && s.mac == mac) || s.ip == ip)) {
-        slot = &s;
-        break;
-      }
-    if (slot == nullptr)
-      for (auto &s : this->slots_)
-        if (!s.used || !this->valid_(s, now)) {
-          slot = &s;
-          break;
-        }
-    if (slot == nullptr) {
-      slot = &this->slots_[0];
-      for (auto &s : this->slots_)
-        if ((int32_t) (s.last - slot->last) < 0)
-          slot = &s;
-    }
-    slot->used = true;
-    slot->mac = mac;
-    slot->ip = ip;
-    slot->last = now;
-  }
-
-  // Does the client at this IP hold a valid pass? A valid pass slides.
-  bool check(uint32_t ip, uint32_t now) {
-    for (auto &s : this->slots_)
-      if (s.used && s.ip == ip) {
-        if (!this->valid_(s, now)) {
-          s.used = false;
-          return false;
-        }
-        s.last = now;
-        return true;
-      }
-    return false;
-  }
-
-  // The client left the access point.
-  void revoke(const Mac &mac) {
-    for (auto &s : this->slots_)
-      if (s.used && s.mac == mac)
-        s.used = false;
-  }
-
-  // Passes granted by IP alone (MAC never learned): dropped whenever a client leaves, since the
-  // address may go to the next client.
-  void revoke_unknown() {
-    for (auto &s : this->slots_)
-      if (s.used && s.mac.zero())
-        s.used = false;
-  }
-
-  void clear() {
-    for (auto &s : this->slots_)
-      s.used = false;
-  }
-
-  size_t active(uint32_t now) const {
-    size_t n = 0;
-    for (const auto &s : this->slots_)
-      if (s.used && this->valid_(s, now))
-        n++;
-    return n;
-  }
-
- protected:
-  struct Slot {
-    bool used{false};
-    Mac mac;
-    uint32_t ip{0};
-    uint32_t last{0};
-  };
-  bool valid_(const Slot &s, uint32_t now) const { return !elapsed(now, s.last, this->window_); }
-
-  Slot slots_[CAPACITY];
-  uint32_t window_;
-};
 
 // ───────────────────────────── dns ─────────────────────────────
 // Answer one DNS query in place-independent form: copy the question and, for an A query,
@@ -509,47 +386,6 @@ inline Claim claim(Route r, bool get, bool captive_active) {
   if (get && captive_active) return Claim::FORWARD;
   return Claim::NONE;
 }
-
-// ───────────────────────────── clients (IP -> MAC) ─────────────────────────────
-// From IP_EVENT_AP_STAIPASSIGNED: the gate needs the MAC of the client that pressed the button,
-// HTTP only knows its IP.
-class ClientTable {
- public:
-  static constexpr size_t CAPACITY = 8;
-  void set(uint32_t ip, const Mac &mac) {
-    Slot *slot = nullptr;
-    for (auto &s : this->slots_)
-      if (s.used && (s.ip == ip || s.mac == mac)) { slot = &s; break; }
-    if (slot == nullptr)
-      for (auto &s : this->slots_)
-        if (!s.used) { slot = &s; break; }
-    if (slot == nullptr) slot = &this->slots_[this->next_++ % CAPACITY];
-    slot->used = true;
-    slot->ip = ip;
-    slot->mac = mac;
-  }
-  bool find(uint32_t ip, Mac &mac) const {
-    for (const auto &s : this->slots_)
-      if (s.used && s.ip == ip) { mac = s.mac; return true; }
-    return false;
-  }
-  void remove(const Mac &mac) {
-    for (auto &s : this->slots_)
-      if (s.used && s.mac == mac) s.used = false;
-  }
-  void clear() {
-    for (auto &s : this->slots_) s.used = false;
-  }
-
- protected:
-  struct Slot {
-    bool used{false};
-    uint32_t ip{0};
-    Mac mac;
-  };
-  Slot slots_[CAPACITY];
-  size_t next_{0};
-};
 
 // ───────────────────────────── password reset on the spot ─────────────────────────────
 // Two ways back to the firmware password when the device is out of reach on the network:
@@ -862,8 +698,6 @@ inline const char *route_name(Route r) {
       return "landing";
     case Route::REDIRECT:
       return "redirect";
-    case Route::ENTER:
-      return "enter";
     case Route::WRAP:
       return "wrap";
     case Route::WIFI:

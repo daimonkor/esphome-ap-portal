@@ -4,7 +4,7 @@
 
 > **Status: 0.x.** The access point, quiet mode, landing page, scan and password work and are
 > tested on an ESP32-S3 and run on the Move Sensor BLE motion sensor (ESP32-C3); HiveScale and the
-> Deye monitor are next. Pin a release tag (`@v0.1.6`) or a commit if you depend on it.
+> Deye monitor are next. Pin a release tag (`@v0.2.0`) or a commit if you depend on it.
 
 Your ESP32 keeps **its own Wi-Fi access point next to the router connection**. A phone that joins
 it gets the **"Sign in to network"** window and lands on your device page — with or without a
@@ -13,7 +13,7 @@ router.
 What it does that ESPHome's `captive_portal` does not:
 
 - the access point stays up after the device has connected to the router;
-- your own landing page: a redirect, a page, or a **gate** (the panel opens only after a button);
+- your own landing page: the phone's connectivity check is redirected to it, the device's own pages open directly;
 - requests from the home network are never touched — only clients of the access point see the landing;
 - **quiet mode**: with no router, ESPHome normally scans every channel and restarts the adapter,
   and phones on the access point lose packets or drop (measured: 45 % loss). `ap_portal` keeps the
@@ -43,7 +43,7 @@ web_server:
   local: true                   # the page works without internet
 
 external_components:
-  - source: github://daimonkor/esphome-ap-portal@v0.1.6
+  - source: github://daimonkor/esphome-ap-portal@v0.2.0
     components: [ap_portal]
 
 ap_portal:
@@ -63,7 +63,7 @@ ap_portal:
   dns:
     enabled: true
   landing:
-    mode: redirect              # redirect (302) / page (200) / gate
+    mode: redirect              # the only mode since 0.2.0 (page and gate were removed)
     path: /welcome
     # variables of the built-in page (usable in your own html too):
     title: My Device            # default: friendly_name
@@ -76,10 +76,6 @@ ap_portal:
     # vars:                     # your own template variables
     #   battery: !lambda return to_string((int) id(soc).state);
     #   fw: "1.2.3"
-    # gate only:
-    # enter_path: /enter        # the button: grants this client a pass, then 302 to /
-    # enter_window: 30min       # a pass ends after this long without requests
-    # pass_paths: [/history.bin]  # never intercepted
   on_client_connected:          # mac (std::string)
   on_client_disconnected:       # mac
   on_ap_restored:               # ESPHome switched the access point off, ap_portal brought it back
@@ -94,7 +90,7 @@ ap_portal:
     firmware: true              # then to the network from the YAML (wifi: ssid / networks)
     # firmware: {ssid: Backup-Net, password: !secret backup}   # or a fallback network of its own
   on_router_fallback:           # to: "previous" / "firmware" / "none", ssid
-  wifi_page:                    # built-in /wifi page, access point clients only (gate too, no button needed)
+  wifi_page:                    # built-in /wifi page, access point clients only
     enabled: true               # scan list, connect to a router network, the access point password
     path: /wifi                 # the landing page's second button leads here unless you set `secondary`
     ap_password: true           # the access point password block
@@ -107,7 +103,6 @@ ap_portal:
   on_power_cycle:               # count — a quick start in a series (blink an LED)
   on_password_reset:            # source: "power_cycles" or "button"
   on_landing:                   # ip, path — the landing page was shown
-  on_enter:                     # mac, ip — gate: a client pressed the button
 ```
 
 Actions: `ap_portal.scan` (background scan without dropping the router), `ap_portal.set_password`
@@ -122,8 +117,8 @@ From lambdas: `id(portal).is_active()`, `client_count()`, `ap_ip()`, `ssid()`, `
 
 `/wifi` lists the networks around (a background scan while the router is connected), connects the
 device to a router network (saved by ESPHome, kept across reboots) and changes the access point
-password. Only clients of the access point get it — never the home network; in gate mode before the
-button too (the access point password is the protection). The landing page's Wi-Fi button opens it
+password. Only clients of the access point get it — never the home network; the access point password is
+the protection. The landing page's Wi-Fi button opens it
 as a popup in place. Its endpoints live under `/ap_portal/`. Turn it off with `wifi_page: {enabled:
 false}` when the device has its own Wi-Fi settings page.
 
@@ -250,7 +245,7 @@ The built-in page and your own `html` go through the same small template engine:
 | `{{#unless name}}…{{/unless}}` | the opposite |
 
 Built-in variables: `title`, `ap_ip`, `sta_ip` (empty without the router), `host` (for
-`http://{{host}}.local/`), `ssid`, `enter` (`enter_path` in gate mode, otherwise `/`), `landing`,
+`http://{{host}}.local/`), `ssid`, `enter` (`/`, the device's page), `landing`,
 `mode`, `clients`, plus the styling keys above (`accent_color`, `accent_text`, `icon_svg`,
 `primary_label`, `secondary_label`, `secondary_href`). Lambdas in `vars:` run in the main loop once
 a second, never in the web server task. A page without `{{` is sent gzip-compressed from flash.
@@ -275,7 +270,7 @@ through `ap_portal`: the device's pages work as usual, ESPHome's Wi-Fi form is n
 | `password_reset: power_cycles` not below `safe_mode: num_attempts` | error |
 | `password_reset` BOOT pin used elsewhere | warning, holding BOOT is off |
 | A `vars:` name that is not `[a-z_][a-z0-9_]*` or is a built-in variable | error |
-| `enter_path`, `enter_window`, `pass_paths` without `mode: gate` | error |
+| `mode: page` / `mode: gate`, `enter_path`, `enter_window`, `pass_paths`, `on_enter` (removed in 0.2.0) | error |
 | ESPHome other than 2026.11.x | warning |
 
 ## Examples
@@ -283,7 +278,7 @@ through `ap_portal`: the device's pages work as usual, ESPHome's Wi-Fi form is n
 - [`examples/hello_world.yaml`](examples/hello_world.yaml) — the smallest config
 - [`examples/motion_sensor.yaml`](examples/motion_sensor.yaml) — access point only in service mode, password from the page
 - [`examples/hivescale.yaml`](examples/hivescale.yaml) — beehive scale at the apiary, usually no router
-- [`examples/deye.yaml`](examples/deye.yaml) — battery monitor, gate mode, must work during power outages
+- [`examples/deye.yaml`](examples/deye.yaml) — battery monitor, Arduino, must work during power outages
 
 ## Development
 

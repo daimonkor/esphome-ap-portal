@@ -1,7 +1,7 @@
 #pragma once
 // ap_portal — the device's own access point next to the router connection.
 // Access point keeper, DNS, DHCP, quiet mode with channel lock, client events, the landing page
-// (a template, see ap_portal_core.h), gate passes, network scan, access point password.
+// (a template, see ap_portal_core.h), network scan, access point password.
 
 #include <atomic>
 #include <functional>
@@ -36,7 +36,6 @@ class ApPortal : public Component, public AsyncWebHandler, public wifi::WiFiScan
   void set_password_persist(bool v) { this->password_persist_ = v; }
   void add_log_exclude_prefix(const std::string &p) { this->log_exclude_prefixes_.push_back(p); }
   void set_dns_enabled(bool v) { this->dns_enabled_ = v; }
-  void set_mode(uint8_t m) { this->route_.mode = static_cast<ap_portal_core::Mode>(m); }
   void set_landing_path(const std::string &p) { this->route_.landing_path = p; }
   void set_html(const std::string &h) { this->html_ = h; }
   void set_js_gz(const uint8_t *client, size_t client_len, const uint8_t *popup, size_t popup_len) {
@@ -58,9 +57,6 @@ class ApPortal : public Component, public AsyncWebHandler, public wifi::WiFiScan
   void add_lambda_var(const std::string &name, std::function<std::string()> &&f) {
     this->lambda_vars_.emplace_back(name, std::move(f));
   }
-  void set_enter_path(const std::string &p) { this->route_.enter_path = p; }
-  void set_enter_window(uint32_t ms) { this->passes_.set_window(ms); }
-  void add_pass_path(const std::string &p) { this->route_.pass_paths.push_back(p); }
   void set_wifi_path(const std::string &p) { this->route_.wifi_path = p; }
   void set_wifi_ap_password(bool v) { this->wifi_ap_password_ = v; }
   void set_ui_button(bool v) { this->route_.wrap_root = v; }
@@ -134,7 +130,6 @@ class ApPortal : public Component, public AsyncWebHandler, public wifi::WiFiScan
   void add_on_portal_start(std::function<void()> &&cb) { this->on_portal_start_.add(std::move(cb)); }
   void add_on_portal_stop(std::function<void()> &&cb) { this->on_portal_stop_.add(std::move(cb)); }
   void add_on_landing(std::function<void(std::string, std::string)> &&cb) { this->on_landing_.add(std::move(cb)); }
-  void add_on_enter(std::function<void(std::string, std::string)> &&cb) { this->on_enter_.add(std::move(cb)); }
   void add_on_power_cycle(std::function<void(int)> &&cb) { this->on_power_cycle_.add(std::move(cb)); }
   void add_on_password_reset(std::function<void(std::string)> &&cb) { this->on_password_reset_.add(std::move(cb)); }
   void add_on_router_fallback(std::function<void(std::string, std::string)> &&cb) {
@@ -152,7 +147,7 @@ class ApPortal : public Component, public AsyncWebHandler, public wifi::WiFiScan
     uint32_t ip;      // network byte order
     char path[48];    // EV_LANDING
   };
-  enum : uint8_t { EV_JOIN = 1, EV_LEAVE, EV_AP_STOP, EV_IP, EV_SCAN_DONE, EV_LANDING, EV_ENTER };
+  enum : uint8_t { EV_JOIN = 1, EV_LEAVE, EV_AP_STOP, EV_IP, EV_SCAN_DONE, EV_LANDING };
   static void on_wifi_event_(void *arg, esp_event_base_t base, int32_t id, void *data);
   static void on_ip_event_(void *arg, esp_event_base_t base, int32_t id, void *data);
   void post_(const Event &ev);
@@ -239,8 +234,6 @@ class ApPortal : public Component, public AsyncWebHandler, public wifi::WiFiScan
 
   // Shared with the web server task, under mu_.
   mutable std::mutex mu_;
-  ap_portal_core::PassTable passes_;
-  ap_portal_core::ClientTable clients_;
   ap_portal_core::Vars lambda_snap_;
   Classified cls_;  // canHandle -> handleRequest of the same request (web server task only)
 
@@ -414,7 +407,6 @@ class ApPortal : public Component, public AsyncWebHandler, public wifi::WiFiScan
   CallbackManager<void()> on_portal_start_;
   CallbackManager<void()> on_portal_stop_;
   CallbackManager<void(std::string, std::string)> on_landing_;
-  CallbackManager<void(std::string, std::string)> on_enter_;
   CallbackManager<void(int)> on_power_cycle_;
   CallbackManager<void(std::string)> on_password_reset_;
   CallbackManager<void(std::string, std::string)> on_router_fallback_;
@@ -458,13 +450,6 @@ class LandingTrigger : public Trigger<std::string, std::string> {
     parent->add_on_landing([this](std::string ip, std::string path) { this->trigger(ip, path); });
   }
 };
-class EnterTrigger : public Trigger<std::string, std::string> {
- public:
-  explicit EnterTrigger(ApPortal *parent) {
-    parent->add_on_enter([this](std::string mac, std::string ip) { this->trigger(mac, ip); });
-  }
-};
-
 class PowerCycleTrigger : public Trigger<int> {
  public:
   explicit PowerCycleTrigger(ApPortal *parent) {

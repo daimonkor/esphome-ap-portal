@@ -30,13 +30,12 @@ static void test_timers() {
 }
 
 // ------------------------------------------------------------------ routing
-static Request req(bool from_ap, const char *host, const char *path, bool get = true, bool pass = false) {
+static Request req(bool from_ap, const char *host, const char *path, bool get = true) {
   Request r;
   r.get = get;
   r.from_ap = from_ap;
   r.host = host;
   r.path = path;
-  r.has_pass = pass;
   return r;
 }
 
@@ -57,9 +56,8 @@ static void test_hosts() {
   CHECK(!is_probe_path("/"));
 }
 
-static void test_route_redirect_page() {
+static void test_route_redirect() {
   RouteConfig c;
-  c.mode = Mode::REDIRECT;
   // home network: never touched, not even probes
   CHECK(route(req(false, "connectivitycheck.gstatic.com", "/generate_204"), c) == Route::PASS);
   CHECK(route(req(false, "192.168.1.132", "/welcome"), c) == Route::PASS);
@@ -71,71 +69,9 @@ static void test_route_redirect_page() {
   CHECK(route(req(true, "100.64.4.1", "/"), c) == Route::PASS);
   CHECK(route(req(true, "deye.local", "/events"), c) == Route::PASS);
   CHECK(route(req(true, "example.com", "/generate_204", false), c) == Route::PASS);  // POST
-  c.mode = Mode::PAGE;
-  CHECK(route(req(true, "100.64.4.1", "/generate_204"), c) == Route::LANDING);
-  CHECK(route(req(true, "example.com", "/x"), c) == Route::LANDING);
-  CHECK(route(req(true, "100.64.4.1", "/"), c) == Route::PASS);
-}
-
-static void test_route_gate() {
-  RouteConfig c;
-  c.mode = Mode::GATE;
-  c.enter_path = "/dashboard";
-  c.pass_paths = {"/history.bin"};
-  CHECK(route(req(true, "100.64.4.1", "/"), c) == Route::LANDING);
-  CHECK(route(req(true, "100.64.4.1", "/0.js"), c) == Route::LANDING);
-  CHECK(route(req(true, "x.com", "/generate_204"), c) == Route::LANDING);
-  CHECK(route(req(true, "100.64.4.1", "/dashboard"), c) == Route::ENTER);
-  CHECK(route(req(true, "100.64.4.1", "/history.bin?from=0"), c) == Route::PASS);
-  CHECK(route(req(true, "100.64.4.1", "/", true, true), c) == Route::PASS);
-  CHECK(route(req(true, "100.64.4.1", "/dashboard", true, true), c) == Route::ENTER);  // re-grant is harmless
-  CHECK(route(req(false, "192.168.1.132", "/"), c) == Route::PASS);  // home network
-  RouteConfig empty;
-  empty.mode = Mode::GATE;
-  empty.pass_paths = {""};  // an empty prefix must not open everything
-  CHECK(route(req(true, "100.64.4.1", "/"), empty) == Route::LANDING);
-}
-
-// ------------------------------------------------------------------ passes
-static Mac mac(uint8_t last) {
-  Mac m;
-  m.b[0] = 0x14;
-  m.b[5] = last;
-  return m;
-}
-
-static void test_passes() {
-  PassTable t(1000);
-  CHECK(!t.check(101, 0));
-  t.grant(mac(1), 101, 0);
-  CHECK(t.check(101, 500));
-  CHECK(t.check(101, 1400));   // slid at 500, valid until 1500
-  CHECK(!t.check(101, 2400));  // no request for 1000 ms
-  CHECK(!t.check(101, 2401));  // and it stays gone
-  // revoke on leave, IP reuse does not inherit the pass
-  t.grant(mac(2), 102, 3000);
-  t.revoke(mac(2));
-  CHECK(!t.check(102, 3001));
-  // same client re-granted with a new IP: one slot, the old IP is gone
-  t.grant(mac(3), 103, 4000);
-  t.grant(mac(3), 113, 4001);
-  CHECK(t.check(113, 4002));
-  CHECK(!t.check(103, 4002));
-  // capacity: the 9th client replaces the one used longest ago
-  PassTable f(100000);
-  for (uint8_t i = 0; i < PassTable::CAPACITY; i++)
-    f.grant(mac(10 + i), 200 + i, 10 + i);
-  CHECK(f.active(20) == PassTable::CAPACITY);
-  f.check(200, 50);  // client 0 is fresh again; client 1 is now the oldest
-  f.grant(mac(99), 299, 60);
-  CHECK(f.check(299, 61));
-  CHECK(f.check(200, 61));
-  CHECK(!f.check(201, 61));
-  // across the wrap
-  PassTable w(1000);
-  w.grant(mac(5), 105, 0xFFFFFF00u);
-  CHECK(w.check(105, 0x00000100u));  // 512 ms later
-  CHECK(!w.check(105, 0x00000600u)); // 1280 ms after the last request
+  // the device's own pages and files are never intercepted (0.2.0: no gate)
+  CHECK(route(req(true, "100.64.4.1", "/history.bin"), c) == Route::PASS);
+  CHECK(route(req(true, "100.64.4.1", "/0.js"), c) == Route::PASS);
 }
 
 // ------------------------------------------------------------------ dns
@@ -277,32 +213,14 @@ static void test_templates() {
   CHECK(has_template_tags("<p>{{x}}</p>"));
 }
 
-// ------------------------------------------------------------------ claim / clients
-static void test_claim_clients() {
+// ------------------------------------------------------------------ claim
+static void test_claim() {
   CHECK(claim(Route::LANDING, true, false) == Claim::OURS);
   CHECK(claim(Route::REDIRECT, true, true) == Claim::OURS);
   CHECK(claim(Route::PASS, true, false) == Claim::NONE);    // web_server answers as usual
   CHECK(claim(Route::PASS, true, true) == Claim::FORWARD);  // captive_portal must not see it
   CHECK(claim(Route::PASS, false, true) == Claim::NONE);    // POST is never captive_portal's
-
-  ClientTable t;
-  Mac a, b, m;
-  a.b[5] = 1;
-  b.b[5] = 2;
-  t.set(0x6401a8c0, a);
-  CHECK(t.find(0x6401a8c0, m) && m == a);
-  t.set(0x6401a8c0, b);  // DHCP gave the IP to another client
-  CHECK(t.find(0x6401a8c0, m) && m == b);
-  t.remove(b);
-  CHECK(!t.find(0x6401a8c0, m));
-  for (uint32_t k = 0; k < 20; k++) {
-    Mac x;
-    x.b[4] = (uint8_t) k;
-    t.set(k, x);
-  }
-  CHECK(t.find(19, m) && m.b[4] == 19);  // full table keeps the newest
 }
-
 // ------------------------------------------------------------------ password reset
 static void test_password_reset() {
   // four power cycles
@@ -349,17 +267,7 @@ static void test_wifi_routes() {
   r.path = "/wifi";
   CHECK(route(r, c) == Route::PASS);
   r.from_ap = true;
-  c.mode = Mode::GATE;  // gate: the Wi-Fi page and API need no pass (the AP password protects them)
-  CHECK(route(r, c) == Route::WIFI);
-  r.path = "/";  // the rest still waits for Enter
-  CHECK(route(r, c) == Route::LANDING);
-  r.get = false;
-  r.path = "/ap_portal/connect";
-  CHECK(route(r, c) == Route::API);
-  r.has_pass = true;
-  CHECK(route(r, c) == Route::API);
   c.wifi_path.clear();  // page off, API on (a device with its own site)
-  c.mode = Mode::REDIRECT;
   r.get = true;
   r.path = "/ap_portal/networks";
   CHECK(route(r, c) == Route::API);
@@ -383,9 +291,6 @@ static void test_wrap() {
   r.from_ap = false;  // home network: ESPHome's page untouched
   CHECK(route(r, c) == Route::PASS);
   r.from_ap = true;
-  c.mode = Mode::GATE;  // gate without a pass: the landing first
-  CHECK(route(r, c) == Route::LANDING);
-  r.has_pass = true;
   CHECK(route(r, c) == Route::WRAP);
   c.wrap_root = false;
   CHECK(route(r, c) == Route::PASS);
@@ -446,25 +351,6 @@ static void test_switch_hopeless() {
   k = switch_streak(r, k, 202); r = 202;  CHECK(k == 2);   // 15 and 202 are both wrong_password
   k = switch_streak(r, k, 204); r = 204;  CHECK(k == 3);
   CHECK(switch_hopeless(k, r));
-}
-
-static void test_passes_unknown_mac() {
-  using ap_portal_core::Mac;
-  using ap_portal_core::PassTable;
-  PassTable t(60000);
-  Mac zero{};
-  Mac a{};
-  a.b[5] = 1;
-  t.grant(zero, 0x0A00000A, 1000);  // static IP .10, MAC unknown
-  t.grant(zero, 0x0B00000A, 1000);  // another one, .11: its own pass, not .10's
-  CHECK(t.check(0x0A00000A, 2000));
-  CHECK(t.check(0x0B00000A, 2000));
-  t.grant(a, 0x0C00000A, 1000);
-  t.revoke(a);                      // a known client leaves
-  t.revoke_unknown();               // IP-only passes go with any leave
-  CHECK(!t.check(0x0A00000A, 3000));
-  CHECK(!t.check(0x0B00000A, 3000));
-  CHECK(!t.check(0x0C00000A, 3000));
 }
 
 static void test_fallback_ap() {
@@ -664,20 +550,17 @@ int main() {
   test_csrf();
   test_timers();
   test_hosts();
-  test_route_redirect_page();
-  test_route_gate();
-  test_passes();
+  test_route_redirect();
   test_dns();
   test_quiet();
   test_strings();
   test_templates();
-  test_claim_clients();
+  test_claim();
   test_password_reset();
   test_wifi_routes();
   test_wrap();
   test_sta_errors();
   test_fallback_ap();
-  test_passes_unknown_mac();
   test_switch_hopeless();
   test_reboot_timer();
   test_fallback_network();

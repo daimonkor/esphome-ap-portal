@@ -2,6 +2,22 @@
 
 Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monitor) run on the library.
 
+## 0.2.0 — 2026-11-20
+
+### Removed
+- Landing modes `page` and `gate`: only the redirect is left (the phone's connectivity check gets
+  a 302 to the landing page, the device's own pages open directly). `page` gave no difference on
+  phones in tests; `gate` (the panel only after a button, with per-client passes) added a tap and
+  `pass_paths` exceptions and protected nothing the access point password does not — its only user,
+  the Deye monitor, moved to the redirect. Also gone: `enter_path`, `enter_window`, `pass_paths` and
+  the `on_enter` trigger. A config that still sets them gets a build error saying so; `mode:
+  redirect` is still accepted. The template variables `enter` (now always `/`) and `mode` stay for
+  pages written for 0.1.x.
+
+### Changed
+- `examples/deye.yaml` follows the real Deye monitor: Arduino, `always_on`, redirect, the Wi-Fi
+  popup from the home network too, no reboot without a router.
+
 ## 0.1.6 — 2026-11-20
 
 ### Fixed
