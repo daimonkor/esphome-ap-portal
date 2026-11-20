@@ -414,7 +414,6 @@ CONFIG_SCHEMA = cv.All(
     ).extend(cv.COMPONENT_SCHEMA),
     _ap_raise,
     cv.only_on_esp32,
-    cv.only_with_framework("esp-idf"),
 )
 
 

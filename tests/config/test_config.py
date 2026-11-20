@@ -166,12 +166,6 @@ GOOD = {
 BAD = {
     # wifi: ap: missing
     "no_wifi_ap": (head(ap=False), "ap_portal:\n", "needs 'wifi: ap:'"),
-    # framework
-    "arduino": (
-        head(esp="\nesp32:\n  board: esp32dev\n  framework:\n    type: arduino\n"),
-        "ap_portal:\n",
-        "esp-idf",
-    ),
     # SSID too long with the MAC suffix: 26 + 7 > 32
     "ssid_suffix_too_long": (head(ap_ssid="A" * 26), "ap_portal:\n  ssid_suffix_mac: true\n", "longer than 32"),
     "var_builtin_name": (head(), "ap_portal:\n  landing: {vars: {ssid: x}}\n", "built-in variable"),
@@ -227,6 +221,26 @@ WARN = {
 @pytest.mark.parametrize("name", GOOD)
 def test_good(tmp_path, name):
     r, out = run(tmp_path, head() + GOOD[name])
+    assert r.returncode == 0, out[-2000:]
+
+
+ESP_ARDUINO = """
+esp32:
+  board: esp32-c3-devkitm-1
+  framework:
+    type: arduino
+"""
+
+
+@pytest.mark.parametrize("name", ["minimal", "gate_full", "page_mode"])
+def test_good_arduino(tmp_path, name):
+    r, out = run(tmp_path, head(esp=ESP_ARDUINO) + GOOD[name])
+    assert r.returncode == 0, out[-2000:]
+
+
+@needs_2026_11
+def test_wifi_ap_always_on_is_valid_arduino(tmp_path):
+    r, out = run(tmp_path, head(esp=ESP_ARDUINO, ap_extra=ALWAYS_ON) + "  post_connect_roaming: false\nap_portal:\n")
     assert r.returncode == 0, out[-2000:]
 
 

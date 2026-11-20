@@ -46,3 +46,9 @@ jobs:
         run: |
           cd examples
           for f in hello_world.yaml motion_sensor.yaml hivescale.yaml deye.yaml; do esphome compile "$f"; done
+      - name: Compile hello_world on Arduino
+        run: |
+          cd examples
+          sed 's/type: esp-idf/type: arduino/; s/name: ap-portal-hello/name: ap-portal-hello-arduino/' hello_world.yaml > hello_world_arduino.yaml
+          grep -q 'type: arduino' hello_world_arduino.yaml
+          esphome compile hello_world_arduino.yaml
