@@ -2,6 +2,27 @@
 
 Versions stay 0.x until all three devices (motion sensor, HiveScale, Deye monitor) run on the library.
 
+## 0.1.5 — 2026-11-20
+
+### Added
+- The Arduino framework on ESP32 (`esp32: framework: type: arduino`). ESPHome uses the same ESP-IDF
+  Wi-Fi driver and web server under both frameworks, so nothing changes on the device; CI builds an
+  example on Arduino too. Checked on an ESP32-S3 (XIAO): access point next to the router, sign-in
+  window and landing, router switch from the page, reboot without a router. A device moved from
+  Arduino keeps its partition table and NVS.
+
+### Fixed
+- Reboot without a router with `wifi: ap: ap_mode: always_on`: ESPHome's own `reboot_timeout`
+  rebooted the device every `reboot_timeout` for the whole outage (also right after a boot that had
+  not seen the router). ap_portal now takes it over in every mode, with the 0.1.4 rules: one reboot
+  per long outage, none while someone is on the access point. `ap_portal: reboot_timeout` is no
+  longer refused next to `always_on`.
+- "A router network is set" is read from the configured networks, not from the network ESPHome has
+  selected right now (empty while it scans): the log showed "no router network set" after a boot, and
+  the timer could be reset in the middle of an outage.
+- Wi-Fi popup and page: after a successful switch the network name is cleared too, not only the
+  password (on a failure both stay, to fix the password).
+
 ## 0.1.4 — 2026-11-20
 
 ### Changed

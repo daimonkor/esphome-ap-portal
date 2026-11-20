@@ -4,7 +4,7 @@
 
 > **Status: 0.x.** The access point, quiet mode, landing page, scan and password work and are
 > tested on an ESP32-S3 and run on the Move Sensor BLE motion sensor (ESP32-C3); HiveScale and the
-> Deye monitor are next. Pin a release tag (`@v0.1.4`) or a commit if you depend on it.
+> Deye monitor are next. Pin a release tag (`@v0.1.5`) or a commit if you depend on it.
 
 Your ESP32 keeps **its own Wi-Fi access point next to the router connection**. A phone that joins
 it gets the **"Sign in to network"** window and lands on your device page — with or without a
@@ -21,7 +21,7 @@ What it does that ESPHome's `captive_portal` does not:
   it comes back, even on another channel;
 - the SSID can carry the MAC suffix, the password can be changed from the device and survives reboots.
 
-Works on any ESP32 with the ESP-IDF framework (tested on ESP32-C3 and ESP32-S3).
+Works on any ESP32 with the ESP-IDF or the Arduino framework (tested on ESP32-C3 and ESP32-S3; Arduino on ESP32-S3).
 Tested with **ESPHome 2026.11.x**; the build warns on other versions.
 
 ## Quick start
@@ -43,7 +43,7 @@ web_server:
   local: true                   # the page works without internet
 
 external_components:
-  - source: github://daimonkor/esphome-ap-portal@v0.1.4
+  - source: github://daimonkor/esphome-ap-portal@v0.1.5
     components: [ap_portal]
 
 ap_portal:
@@ -269,7 +269,6 @@ through `ap_portal`: the device's pages work as usual, ESPHome's Wi-Fi form is n
 
 | Situation | Result |
 |---|---|
-| Framework is not ESP-IDF | error |
 | No `wifi: ap:` | error |
 | No `manual_ip` in `wifi: ap:`, or a private address | warning: Android will not show the sign-in window |
 | SSID + MAC suffix longer than 32 bytes | error |
