@@ -3,8 +3,9 @@
 **English** · [Українська](README.uk.md) · [Русский](README.ru.md)
 
 > **Status: 0.x.** The access point, quiet mode, landing page, scan and password work and are
-> tested on an ESP32-S3 and run on the Move Sensor BLE motion sensor (ESP32-C3); HiveScale and the
-> Deye monitor are next. Pin a release tag (`@v0.2.0`) or a commit if you depend on it.
+> tested on an ESP32-S3 and run on two real devices: the Move Sensor BLE motion sensor (ESP32-C3,
+> esp-idf) and the Deye battery monitor (ESP32-C3, Arduino); HiveScale is next. Pin a release tag
+> (`@v0.2.0`) or a commit if you depend on it.
 
 Your ESP32 keeps **its own Wi-Fi access point next to the router connection**. A phone that joins
 it gets the **"Sign in to network"** window and lands on your device page — with or without a
